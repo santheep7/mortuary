@@ -56,7 +56,7 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Dat
 initDatabase().then(() => {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Mortuary Management System running on port ${PORT}`);
-    console.log(`Connected to MySQL database: mortuary_db`);
+    console.log(`Connected to PostgreSQL database: ${process.env.PG_DATABASE}`);
     console.log(`Access on LAN: http://<SERVER_IP>:${PORT}`);
   });
 }).catch(err => {

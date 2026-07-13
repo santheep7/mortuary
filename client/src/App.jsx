@@ -52,7 +52,7 @@ function App() {
               <Route path="/" element={<Login/>}/>
               <Route path="/admin-login" element={<AdminLogin/>}/>
               <Route path="/superadmin-login" element={<SuperAdminLogin/>}/>
-              <Route path="/admin_register" element={<AdminRegister/>}/>
+              <Route path="/admin-register" element={<AdminRegister/>}/>
               <Route path="/user-guide" element={<UserGuide/>}/>
               <Route path="/dashboard" element={<Dashboard_Base/>}>
                <Route path="admin-dashboard" element={<AdminDashboard/>}/>
