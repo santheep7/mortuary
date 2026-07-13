@@ -1,0 +1,363 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import {
+  Users, Shield, Settings, LogOut, Activity, Database,
+  Server, AlertCircle, CheckCircle, UserPlus, Trash2, Edit
+} from 'lucide-react';
+import { API_BASE } from '../config.js';
+
+function SuperAdminDashboard() {
+  const [stats, setStats] = useState(null);
+  const [admins, setAdmins] = useState([]);
+  const [mortuaryName, setMortuaryName] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [showAddAdminModal, setShowAddAdminModal] = useState(false);
+  const [showEditMortuaryModal, setShowEditMortuaryModal] = useState(false);
+  const [newAdmin, setNewAdmin] = useState({ username: '', email: '', password: '' });
+  const [editMortuaryName, setEditMortuaryName] = useState('');
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    console.log('SuperAdminDashboard mounted');
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      const [statsRes, adminsRes, mortuaryRes] = await Promise.all([
+        axios.get(`${API_BASE}/dashboard/stats`).catch(() => ({ data: null })),
+        axios.get(`${API_BASE}/admin/list`).catch(() => ({ data: [] })),
+        axios.get(`${API_BASE}/billing-settings/mortuary-name`).catch(() => ({ data: { mortuary_name: 'MOSC Medical College Mortuary' } }))
+      ]);
+      setStats(statsRes.data);
+      setAdmins(adminsRes.data);
+      setMortuaryName(mortuaryRes.data.mortuary_name || 'MOSC Medical College Mortuary');
+    } catch (error) {
+      console.error('Error loading superadmin dashboard:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddAdmin = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${API_BASE}/admin/register`, newAdmin);
+      setShowAddAdminModal(false);
+      setNewAdmin({ username: '', email: '', password: '' });
+      fetchDashboardData();
+      alert('Admin added successfully');
+    } catch (error) {
+      alert('Error adding admin: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleDeleteAdmin = async (adminId) => {
+    if (!confirm('Are you sure you want to delete this admin?')) return;
+    try {
+      await axios.delete(`${API_BASE}/admin/${adminId}`);
+      fetchDashboardData();
+      alert('Admin deleted successfully');
+    } catch (error) {
+      alert('Error deleting admin: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleUpdateMortuaryName = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${API_BASE}/billing-settings/mortuary-name`, {
+        mortuary_name: editMortuaryName,
+        updated_by: 'SuperAdmin'
+      });
+      setShowEditMortuaryModal(false);
+      setEditMortuaryName('');
+      fetchDashboardData();
+      alert('Mortuary name updated successfully');
+    } catch (error) {
+      alert('Error updating mortuary name: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('role');
+    localStorage.removeItem('admin');
+    navigate('/superadmin-login');
+  };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[70vh] bg-slate-50/50">
+        <div className="relative w-16 h-16">
+          <div className="absolute inset-0 border-4 border-purple-500/20 rounded-full"></div>
+          <div className="absolute inset-0 border-4 border-t-purple-600 rounded-full animate-spin"></div>
+        </div>
+        <span className="text-sm font-semibold text-slate-600 mt-4 animate-pulse">
+          Loading SuperAdmin Dashboard...
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-slate-50 to-indigo-50">
+      {/* Header */}
+      <div className="bg-white border-b border-purple-100 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2 text-xs font-bold text-purple-600 tracking-wider uppercase bg-purple-50 px-2.5 py-1 rounded-full w-fit mb-1">
+                <Shield size={12} /> SuperAdmin Control Center
+              </div>
+              <h1 className="text-2xl font-extrabold text-slate-900">SuperAdmin Dashboard</h1>
+              <p className="text-sm text-slate-500">{mortuaryName}</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  setEditMortuaryName(mortuaryName);
+                  setShowEditMortuaryModal(true);
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors"
+              >
+                <Edit size={16} /> Edit Mortuary Name
+              </button>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+              >
+                <LogOut size={16} /> Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {[
+            { label: 'Total Bodies', val: stats?.totalBodies || 0, icon: Users, color: 'bg-blue-50 text-blue-600 border-blue-200' },
+            { label: 'Active Allocations', val: stats?.activeAllocations || 0, icon: Activity, color: 'bg-green-50 text-green-600 border-green-200' },
+            { label: 'Total Admins', val: admins.length, icon: Shield, color: 'bg-purple-50 text-purple-600 border-purple-200' },
+            { label: 'Pending Bills', val: stats?.pendingBills || 0, icon: Database, color: 'bg-amber-50 text-amber-600 border-amber-200' }
+          ].map((stat, i) => (
+            <div key={i} className={`bg-white border rounded-xl p-6 shadow-sm ${stat.color}`}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-semibold text-slate-600">{stat.label}</span>
+                <stat.icon size={20} />
+              </div>
+              <div className="text-3xl font-bold text-slate-900">{stat.val}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Admin Management Section */}
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mb-8">
+          <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-slate-800">Admin Management</h2>
+              <p className="text-sm text-slate-500">Manage system administrators</p>
+            </div>
+            <button
+              onClick={() => setShowAddAdminModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+            >
+              <UserPlus size={16} /> Add Admin
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                  <th className="px-6 py-3">Username</th>
+                  <th className="px-6 py-3">Email</th>
+                  <th className="px-6 py-3">Role</th>
+                  <th className="px-6 py-3">Status</th>
+                  <th className="px-6 py-3">Created At</th>
+                  <th className="px-6 py-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
+                {admins.length > 0 ? (
+                  admins.map((admin) => (
+                    <tr key={admin.id} className="hover:bg-slate-50">
+                      <td className="px-6 py-4 font-medium">{admin.username}</td>
+                      <td className="px-6 py-4">{admin.email || 'N/A'}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                          admin.role === 'SuperAdmin' 
+                            ? 'bg-purple-100 text-purple-800' 
+                            : 'bg-blue-100 text-blue-800'
+                        }`}>
+                          {admin.role}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                          admin.status === 'Active' 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                          {admin.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        {new Date(admin.createdAt).toLocaleDateString('en-IN')}
+                      </td>
+                      <td className="px-6 py-4">
+                        {admin.role !== 'SuperAdmin' && (
+                          <button
+                            onClick={() => handleDeleteAdmin(admin.id)}
+                            className="text-red-600 hover:text-red-800"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="6" className="px-6 py-10 text-center text-slate-400">
+                      No admins found
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* System Status */}
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <Server size={24} className="text-purple-600" />
+            <h2 className="text-lg font-bold text-slate-800">System Status</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="flex items-center gap-3 p-4 bg-green-50 rounded-lg border border-green-200">
+              <CheckCircle size={20} className="text-green-600" />
+              <div>
+                <div className="text-sm font-semibold text-slate-800">Database</div>
+                <div className="text-xs text-green-600">Connected</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 p-4 bg-green-50 rounded-lg border border-green-200">
+              <CheckCircle size={20} className="text-green-600" />
+              <div>
+                <div className="text-sm font-semibold text-slate-800">API Server</div>
+                <div className="text-xs text-green-600">Operational</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 p-4 bg-green-50 rounded-lg border border-green-200">
+              <CheckCircle size={20} className="text-green-600" />
+              <div>
+                <div className="text-sm font-semibold text-slate-800">Application</div>
+                <div className="text-xs text-green-600">Running</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Add Admin Modal */}
+      {showAddAdminModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <h3 className="text-lg font-bold text-slate-800 mb-4">Add New Admin</h3>
+            <form onSubmit={handleAddAdmin} className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-slate-700">Username</label>
+                <input
+                  type="text"
+                  required
+                  value={newAdmin.username}
+                  onChange={(e) => setNewAdmin({ ...newAdmin, username: e.target.value })}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700">Email</label>
+                <input
+                  type="email"
+                  value={newAdmin.email}
+                  onChange={(e) => setNewAdmin({ ...newAdmin, email: e.target.value })}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700">Password</label>
+                <input
+                  type="password"
+                  required
+                  value={newAdmin.password}
+                  onChange={(e) => setNewAdmin({ ...newAdmin, password: e.target.value })}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1"
+                />
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowAddAdminModal(false)}
+                  className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                >
+                  Add Admin
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Mortuary Name Modal */}
+      {showEditMortuaryModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <h3 className="text-lg font-bold text-slate-800 mb-4">Edit Mortuary Name</h3>
+            <form onSubmit={handleUpdateMortuaryName} className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-slate-700">Mortuary Name</label>
+                <input
+                  type="text"
+                  required
+                  value={editMortuaryName}
+                  onChange={(e) => setEditMortuaryName(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1"
+                  placeholder="Enter mortuary name"
+                />
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditMortuaryModal(false);
+                    setEditMortuaryName('');
+                  }}
+                  className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                >
+                  Update Name
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default SuperAdminDashboard;

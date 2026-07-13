@@ -1,0 +1,244 @@
+import { v4 as uuidv4 } from 'uuid';
+import { queryAll, queryOne, runQuery, generateBodyNumber } from '../config/db.js';
+
+export async function getBodyTypes(req, res) {
+  try {
+    const types = await queryAll('SELECT * FROM body_types');
+    res.json(types);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
+export async function getBodies(req, res) {
+  try {
+    const { status, bodyType, search } = req.query;
+    let query  = 'SELECT * FROM bodies WHERE 1=1';
+    const params = [];
+    let idx = 1;
+
+    if (status)   { query += ` AND status = $${idx++}`;     params.push(status); }
+    if (bodyType) { query += ` AND "bodyType" = $${idx++}`; params.push(bodyType); }
+    if (search) {
+      query += ` AND ("patientName" ILIKE $${idx} OR "bodyNumber" ILIKE $${idx+1} OR "hospitalNumber" ILIKE $${idx+2})`;
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+      idx += 3;
+    }
+    query += ' ORDER BY "createdAt" DESC';
+
+    const bodies = await queryAll(query, params);
+
+    for (const body of bodies) {
+      body.allocation = await queryOne(`
+        SELECT ca.*, c."cabinNumber"
+        FROM cabin_allocations ca
+        JOIN cabins c ON ca."cabinId" = c.id
+        WHERE ca."bodyId" = $1
+        ORDER BY ca."createdAt" DESC LIMIT 1
+      `, [body.id]);
+    }
+
+    res.json(bodies);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
+export async function getBodyById(req, res) {
+  try {
+    const { id } = req.params;
+    const body = await queryOne('SELECT * FROM bodies WHERE id = $1', [id]);
+    if (!body) return res.status(404).json({ error: 'Body not found' });
+
+    const allocation = await queryOne(`
+      SELECT ca.*, c."cabinNumber"
+      FROM cabin_allocations ca
+      JOIN cabins c ON ca."cabinId" = c.id
+      WHERE ca."bodyId" = $1
+      ORDER BY ca."createdAt" DESC LIMIT 1
+    `, [id]);
+
+    const billing = await queryOne('SELECT * FROM billing WHERE "bodyId" = $1', [id]);
+    res.json({ ...body, allocation, billing });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
+export async function getBodyAllocation(req, res) {
+  try {
+    const { id } = req.params;
+    const allocation = await queryOne(`
+      SELECT ca.*, c."cabinNumber"
+      FROM cabin_allocations ca
+      JOIN cabins c ON ca."cabinId" = c.id
+      WHERE ca."bodyId" = $1
+      ORDER BY ca."createdAt" DESC LIMIT 1
+    `, [id]);
+
+    if (!allocation) return res.status(404).json({ error: 'No allocation found for this body' });
+    res.json(allocation);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
+export async function createBody(req, res) {
+  try {
+    const {
+      bodyType, hospitalNumber, patientName, gender, age, locality,
+      dateOfDeath, timeOfDeath, declaredBy, reasonOfDeath, deathIntimationNo, mlcNo,
+      estimatedDaysOfStay,
+      witness1Name, witness1Address, witness1Contact,
+      witness2Name, witness2Address, witness2Contact,
+      policeStationName, stationSiName, presentPoliceOfficerName, nocCertificateUrl, freezerRequired
+    } = req.body;
+
+    if (bodyType === 'MLC') {
+      if (!policeStationName || !stationSiName || !presentPoliceOfficerName) {
+        return res.status(400).json({ error: 'Police Station Name, SI Name, and Officer Name are mandatory for MLC cases.' });
+      }
+    }
+
+    const id         = uuidv4();
+    const bodyNumber = await generateBodyNumber();
+    const freezerReqValue = bodyType === 'MLC'
+      ? (freezerRequired === false || freezerRequired === 0 || freezerRequired === '0' || freezerRequired === 'false' ? 0 : 1)
+      : null;
+
+    await runQuery(`
+      INSERT INTO bodies (
+        id, "bodyNumber", "bodyType", "hospitalNumber", "patientName", gender, age, locality,
+        "dateOfDeath", "timeOfDeath", "declaredBy", "reasonOfDeath", "deathIntimationNo", "mlcNo",
+        "estimatedDaysOfStay", "witness1Name", "witness1Address", "witness1Contact",
+        "witness2Name", "witness2Address", "witness2Contact",
+        "policeStationName", "stationSiName", "presentPoliceOfficerName",
+        "nocCertificateUrl", "freezerRequired"
+      ) VALUES (
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
+        $15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26
+      )
+    `, [
+      id, bodyNumber, bodyType, hospitalNumber, patientName, gender, age, locality,
+      dateOfDeath, timeOfDeath, declaredBy, reasonOfDeath, deathIntimationNo, mlcNo,
+      estimatedDaysOfStay,
+      witness1Name, witness1Address, witness1Contact,
+      witness2Name, witness2Address, witness2Contact,
+      policeStationName || null, stationSiName || null, presentPoliceOfficerName || null,
+      nocCertificateUrl || null, freezerReqValue
+    ]);
+
+    const body = await queryOne('SELECT * FROM bodies WHERE id = $1', [id]);
+    res.json(body);
+  } catch (error) {
+    console.error('Error registering body:', error);
+    res.status(500).json({ error: error.message });
+  }
+}
+
+export async function updateBody(req, res) {
+  try {
+    const { id } = req.params;
+    const fields = req.body;
+    const setClauses = [];
+    const values    = [];
+    let idx = 1;
+
+    // Map camelCase keys to quoted PG column names
+    const pgKey = (key) => {
+      // columns that are stored lowercase in PG
+      const lower = ['status', 'gender', 'age', 'locality', 'address', 'billing_status'];
+      return lower.includes(key) ? key : `"${key}"`;
+    };
+
+    for (const [key, value] of Object.entries(fields)) {
+      if (key !== 'id') {
+        setClauses.push(`${pgKey(key)} = $${idx++}`);
+        values.push(value);
+      }
+    }
+
+    if (setClauses.length > 0) {
+      setClauses.push(`"updatedAt" = NOW()`);
+      values.push(id);
+      await runQuery(`UPDATE bodies SET ${setClauses.join(', ')} WHERE id = $${idx}`, values);
+    }
+
+    const body = await queryOne('SELECT * FROM bodies WHERE id = $1', [id]);
+    res.json(body);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
+export async function deleteBody(req, res) {
+  try {
+    const { id } = req.params;
+    if (!id) return res.status(400).json({ error: 'Body ID is required' });
+
+    const body = await queryOne('SELECT id FROM bodies WHERE id = $1 LIMIT 1', [id]);
+    if (!body) return res.status(404).json({ error: 'Body not found' });
+
+    const allocation = await queryOne('SELECT id FROM cabin_allocations WHERE "bodyId" = $1 LIMIT 1', [id]);
+    if (allocation) {
+      return res.status(400).json({ error: 'Cannot delete body with active allocations. Please release the cabin first.' });
+    }
+
+    const result = await runQuery('DELETE FROM bodies WHERE id = $1', [id]);
+    if (result.rowCount === 0) return res.status(500).json({ error: 'Delete failed' });
+
+    res.json({ message: 'Body deleted successfully' });
+  } catch (error) {
+    console.error('DELETE BODY ERROR:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+}
+
+export async function getMlcRegistration(req, res) {
+  try {
+    const { bodyId } = req.params;
+    const body = await queryOne('SELECT * FROM bodies WHERE id = $1', [bodyId]);
+    if (!body) return res.status(404).json({ error: 'Body not found' });
+    if (body.bodyType !== 'MLC') {
+      return res.status(400).json({ error: 'This body is not an MLC case.' });
+    }
+    res.json(body);
+  } catch (error) {
+    console.error('MLC REGISTRATION ERROR:', error);
+    res.status(500).json({ error: error.message });
+  }
+}
+
+export async function getConcessionAuthorities(req, res) {
+  try {
+    const authorities = await queryAll('SELECT * FROM concession_authorities WHERE "isActive" = 1');
+    res.json(authorities);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
+export async function createConcessionAuthority(req, res) {
+  try {
+    const { name, designation, department, maxDiscountPercent } = req.body;
+    const id = uuidv4();
+    await runQuery(
+      'INSERT INTO concession_authorities (id, name, designation, department, "maxDiscountPercent") VALUES ($1, $2, $3, $4, $5)',
+      [id, name, designation, department, maxDiscountPercent || 100]
+    );
+    const authority = await queryOne('SELECT * FROM concession_authorities WHERE id = $1', [id]);
+    res.json(authority);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
+export async function deleteConcessionAuthority(req, res) {
+  try {
+    const { id } = req.params;
+    await runQuery('UPDATE concession_authorities SET "isActive" = 0 WHERE id = $1', [id]);
+    res.json({ message: 'Concession authority deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message, error: error.message });
+  }
+}
