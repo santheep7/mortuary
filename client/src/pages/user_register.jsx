@@ -14,6 +14,15 @@ const initialForm = {
   password: "",
 };
 
+// Format phone number with hyphens: XXX-XXX-XXXX
+const formatPhoneNumber = (value) => {
+  const cleaned = value.replace(/\D/g, '');
+  if (cleaned.length === 0) return '';
+  if (cleaned.length <= 3) return cleaned;
+  if (cleaned.length <= 6) return `${cleaned.slice(0, 3)}-${cleaned.slice(3)}`;
+  return `${cleaned.slice(0, 3)}-${cleaned.slice(3, 6)}-${cleaned.slice(6, 10)}`;
+};
+
 function validate(fields) {
   const errors = {};
   if (!fields.fullName.trim()) errors.fullName = "Full name is required.";
@@ -24,12 +33,14 @@ function validate(fields) {
   }
   if (!fields.department) errors.department = "Please select a department.";
   const phoneRegex = /^[6-9]\d{9}$/;
-  if (!fields.phone1.trim()) {
+  const phone1Clean = fields.phone1.replace(/\D/g, '');
+  const phone2Clean = fields.phone2.replace(/\D/g, '');
+  if (!phone1Clean) {
     errors.phone1 = "Phone number is required.";
-  } else if (!phoneRegex.test(fields.phone1.trim())) {
+  } else if (!phoneRegex.test(phone1Clean)) {
     errors.phone1 = "Enter a valid 10-digit phone number.";
   }
-  if (fields.phone2.trim() && !phoneRegex.test(fields.phone2.trim())) {
+  if (phone2Clean && !phoneRegex.test(phone2Clean)) {
     errors.phone2 = "Enter a valid 10-digit phone number.";
   }
   if (!fields.email.trim()) {
@@ -138,7 +149,8 @@ export default function Register() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm(prev => ({ ...prev, [name]: value }));
+    const processedValue = (name === 'phone1' || name === 'phone2') ? formatPhoneNumber(value) : value;
+    setForm(prev => ({ ...prev, [name]: processedValue }));
     setErrors(prev => ({ ...prev, [name]: "" }));
     setSubmitError("");
   };

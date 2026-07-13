@@ -5,6 +5,15 @@ import MLCRegistrationPrint from './MLCRegistrationPrint';
 
 import { API_BASE } from '../config.js';
 
+// Format phone number with hyphens: XXX-XXX-XXXX
+const formatPhoneNumber = (value) => {
+  const cleaned = value.replace(/\D/g, '');
+  if (cleaned.length === 0) return '';
+  if (cleaned.length <= 3) return cleaned;
+  if (cleaned.length <= 6) return `${cleaned.slice(0, 3)}-${cleaned.slice(3)}`;
+  return `${cleaned.slice(0, 3)}-${cleaned.slice(3, 6)}-${cleaned.slice(6, 10)}`;
+};
+
 // Dummy patient data for hospital number lookup
 const dummyPatients = [
   { hospitalNumber: 'HOS-001', patientName: 'John Mathew', gender: 'Male', age: 65, locality: 'Kolenchery, Ernakulam', dateOfDeath: '2026-04-08', timeOfDeath: '09:30', reasonOfDeath: 'Cardiac Arrest', bodyType: 'Non-MLC', declaredBy: 'Dr. Joseph KP' },
@@ -187,7 +196,8 @@ function BodyRegistration() {
     if (type === 'checkbox') {
       setFormData({ ...formData, [name]: checked });
     } else {
-      setFormData({ ...formData, [name]: value });
+      const processedValue = (name === 'witness1Contact' || name === 'witness2Contact') ? formatPhoneNumber(value) : value;
+      setFormData({ ...formData, [name]: processedValue });
     }
   };
 

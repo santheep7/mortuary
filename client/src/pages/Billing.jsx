@@ -8,6 +8,15 @@ import CombinedBillPrint from './CombinedBillPrint';
 
 import { API_BASE } from '../config.js';
 
+// Format phone number with hyphens: XXX-XXX-XXXX
+const formatPhoneNumber = (value) => {
+  const cleaned = value.replace(/\D/g, '');
+  if (cleaned.length === 0) return '';
+  if (cleaned.length <= 3) return cleaned;
+  if (cleaned.length <= 6) return `${cleaned.slice(0, 3)}-${cleaned.slice(3)}`;
+  return `${cleaned.slice(0, 3)}-${cleaned.slice(3, 6)}-${cleaned.slice(6, 10)}`;
+};
+
 function Billing() {
   const role = localStorage.getItem("role");
   const isAdmin = role === "Admin";
@@ -192,8 +201,14 @@ function Billing() {
         setLoading(false);
         return;
       }
-      if (!billingData.staffPhone?.trim()) {
+      const staffPhoneClean = billingData.staffPhone?.replace(/\D/g, '');
+      if (!staffPhoneClean) {
         alert('Staff Phone Number is required for staff concession.');
+        setLoading(false);
+        return;
+      }
+      if (!/^[6-9]\d{9}$/.test(staffPhoneClean)) {
+        alert('Please enter a valid 10-digit phone number starting with 6-9.');
         setLoading(false);
         return;
       }
@@ -761,10 +776,10 @@ function Billing() {
                           <input
                             type="text"
                             value={billingData.staffPhone}
-                            onChange={(e) => setBillingData({ ...billingData, staffPhone: e.target.value })}
+                            onChange={(e) => setBillingData({ ...billingData, staffPhone: formatPhoneNumber(e.target.value) })}
                             className="input-field"
                             required={billingData.staffConcession}
-                            placeholder="Phone Number"
+                            placeholder="XXX-XXX-XXXX"
                           />
                         </div>
                         <div>
