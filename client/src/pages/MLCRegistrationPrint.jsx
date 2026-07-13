@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import html2pdf from 'html2pdf.js';
-import logo1 from './images/logo1.png';
+import { useMortuaryName } from '../context/MortuaryNameContext.jsx';
+import { getUploadUrl } from '../config.js';
 
 import { API_BASE } from '../config.js';
 
@@ -9,6 +10,30 @@ function MLCRegistrationPrint({ bodyId, onClose, isInner = false }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const docRef = useRef();
+  const [logoBase64, setLogoBase64] = useState(null);
+  const { mortuaryLogo } = useMortuaryName();
+
+  // Convert logo to base64 for PDF
+  useEffect(() => {
+    if (mortuaryLogo) {
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        setLogoBase64(canvas.toDataURL('image/png'));
+      };
+      img.onerror = () => {
+        console.error('Failed to load logo for PDF');
+      };
+      img.src = getUploadUrl(mortuaryLogo);
+    } else {
+      setLogoBase64(null);
+    }
+  }, [mortuaryLogo]);
 
   // Fetch MLC registration data
   useEffect(() => {
@@ -163,7 +188,13 @@ function MLCRegistrationPrint({ bodyId, onClose, isInner = false }) {
       {/* ── HEADER (identical to MortuaryBillPrint / ServiceBillPrint) ── */}
       <div style={{ borderBottom: '2px solid #e5e7eb', paddingBottom: '16px', marginBottom: '20px', textAlign: 'center' }}>
         <div style={{ marginBottom: '10px' }}>
-          <img src={logo1} alt="MOSC Hospital Logo" style={{ height: '64px', margin: '0 auto', display: 'block' }} />
+          {logoBase64 ? (
+            <img src={logoBase64} alt="MOSC Hospital Logo" style={{ height: '64px', margin: '0 auto', display: 'block' }} />
+          ) : (
+            <div style={{ width: '64px', height: '64px', backgroundColor: '#1e3a8a', borderRadius: '50%', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ color: 'white', fontWeight: 700, fontSize: '24px' }}>M</span>
+            </div>
+          )}
         </div>
         <p style={{ color: '#6b7280', fontSize: '11px', margin: '0 0 6px' }}>
           Kolenchery, Ernakulam, Kerala

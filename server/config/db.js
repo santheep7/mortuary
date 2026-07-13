@@ -296,6 +296,7 @@ export async function initDatabase() {
       CREATE TABLE IF NOT EXISTS system_settings (
         id                       VARCHAR(36) PRIMARY KEY,
         mortuary_name            VARCHAR(255) DEFAULT 'MOSC Medical College Mortuary',
+        mortuary_logo            TEXT,
         first_day_charge         NUMERIC(10,2) NOT NULL DEFAULT 2100.00,
         hourly_charge_after_24hrs NUMERIC(10,2) NOT NULL DEFAULT 130.00,
         updated_by               VARCHAR(255),
@@ -320,6 +321,8 @@ export async function initDatabase() {
       ['users',                  'approval_status',          "VARCHAR(20) NOT NULL DEFAULT 'pending'"],
       ['users',                  'admin_remarks',            'VARCHAR(500)'],
       ['users',                  'updated_at',               'TIMESTAMP DEFAULT CURRENT_TIMESTAMP'],
+      ['system_settings',        'mortuary_name',            "VARCHAR(255) DEFAULT 'MOSC Medical College Mortuary'"],
+      ['system_settings',        'mortuary_logo',            'TEXT'],
     ];
 
     for (const [table, column, type] of colMigrations) {

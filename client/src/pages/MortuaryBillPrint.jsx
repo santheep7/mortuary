@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import html2pdf from 'html2pdf.js';
-import logo1 from './images/logo1.png';
+import { useMortuaryName } from '../context/MortuaryNameContext.jsx';
+import { getUploadUrl } from '../config.js';
 
 import { API_BASE } from '../config.js';
 
@@ -9,6 +10,30 @@ function MortuaryBillPrint({ billingId, onClose, isInner = false }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const billRef = useRef();
+  const [logoBase64, setLogoBase64] = useState(null);
+  const { mortuaryLogo } = useMortuaryName();
+
+  // Convert logo to base64 for PDF
+  useEffect(() => {
+    if (mortuaryLogo) {
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        setLogoBase64(canvas.toDataURL('image/png'));
+      };
+      img.onerror = () => {
+        console.error('Failed to load logo for PDF');
+      };
+      img.src = getUploadUrl(mortuaryLogo);
+    } else {
+      setLogoBase64(null);
+    }
+  }, [mortuaryLogo]);
 
   // Fetch data
   useEffect(() => {
@@ -118,7 +143,13 @@ function MortuaryBillPrint({ billingId, onClose, isInner = false }) {
         {/* HEADER */}
         <div className="border-b pb-4 mb-4 text-center">
           <div className='grid grid-cols-1 items-center mb-3'>
-            <img src={logo1} alt="Logo" className="mx-auto h-16" />
+            {logoBase64 ? (
+              <img src={logoBase64} alt="Logo" className="mx-auto h-16" />
+            ) : (
+              <div className="mx-auto h-16 w-16 bg-blue-600 rounded-full flex items-center justify-center">
+                <span className="text-white font-bold text-2xl">M</span>
+              </div>
+            )}
           </div>
           <p className="text-gray-500 text-xs">
             Kolenchery, Ernakulam, Kerala

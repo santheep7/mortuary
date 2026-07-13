@@ -62,6 +62,49 @@ export async function updateMortuaryName(req, res) {
   }
 }
 
+export async function uploadMortuaryLogo(req, res) {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const logoUrl = `/uploads/${req.file.filename}`;
+    const updated_by = req.body.updated_by || 'SuperAdmin';
+
+    let settings = await queryOne('SELECT id FROM system_settings LIMIT 1');
+    const id = settings ? settings.id : uuidv4();
+
+    if (settings) {
+      await runQuery(
+        'UPDATE system_settings SET mortuary_logo=$1, updated_by=$2, updated_at=NOW() WHERE id=$3',
+        [logoUrl, updated_by, id]
+      );
+    } else {
+      await runQuery(
+        'INSERT INTO system_settings (id, mortuary_logo, updated_by) VALUES ($1,$2,$3)',
+        [id, logoUrl, updated_by]
+      );
+    }
+
+    const updatedSettings = await queryOne('SELECT mortuary_logo FROM system_settings WHERE id = $1', [id]);
+    res.json({ message: 'Logo uploaded successfully', mortuary_logo: updatedSettings.mortuary_logo });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
+export async function getMortuaryLogo(req, res) {
+  try {
+    const settings = await queryOne('SELECT mortuary_logo FROM system_settings LIMIT 1');
+    if (!settings || !settings.mortuary_logo) {
+      return res.json({ mortuary_logo: null });
+    }
+    res.json({ mortuary_logo: settings.mortuary_logo });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
 export async function updateBillingSettings(req, res) {
   try {
     const { first_day_charge, hourly_charge_after_24hrs, updated_by } = req.body;

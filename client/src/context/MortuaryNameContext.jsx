@@ -14,18 +14,23 @@ export const useMortuaryName = () => {
 
 export const MortuaryNameProvider = ({ children }) => {
   const [mortuaryName, setMortuaryName] = useState('MOSC Medical College Mortuary');
+  const [mortuaryLogo, setMortuaryLogo] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchMortuaryName();
+    fetchMortuarySettings();
   }, []);
 
-  const fetchMortuaryName = async () => {
+  const fetchMortuarySettings = async () => {
     try {
-      const res = await axios.get(`${API_BASE}/billing-settings/mortuary-name`);
-      setMortuaryName(res.data.mortuary_name || 'MOSC Medical College Mortuary');
+      const [nameRes, logoRes] = await Promise.all([
+        axios.get(`${API_BASE}/billing-settings/mortuary-name`),
+        axios.get(`${API_BASE}/billing-settings/mortuary-logo`)
+      ]);
+      setMortuaryName(nameRes.data.mortuary_name || 'MOSC Medical College Mortuary');
+      setMortuaryLogo(logoRes.data.mortuary_logo);
     } catch (error) {
-      console.error('Error fetching mortuary name:', error);
+      console.error('Error fetching mortuary settings:', error);
     } finally {
       setLoading(false);
     }
@@ -35,8 +40,12 @@ export const MortuaryNameProvider = ({ children }) => {
     setMortuaryName(newName);
   };
 
+  const updateMortuaryLogo = (newLogo) => {
+    setMortuaryLogo(newLogo);
+  };
+
   return (
-    <MortuaryNameContext.Provider value={{ mortuaryName, loading, updateMortuaryName, fetchMortuaryName }}>
+    <MortuaryNameContext.Provider value={{ mortuaryName, mortuaryLogo, loading, updateMortuaryName, updateMortuaryLogo, fetchMortuarySettings }}>
       {children}
     </MortuaryNameContext.Provider>
   );

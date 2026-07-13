@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from "react-router-dom";
 import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import { useMortuaryName } from '../context/MortuaryNameContext.jsx';
+import { getUploadUrl } from '../config.js';
 import {
   LayoutDashboard,
   Users,
@@ -27,7 +28,7 @@ export default function Dashboard_Base() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const role = localStorage.getItem("role");
   const admin = localStorage.getItem("admin");
-  const { mortuaryName } = useMortuaryName();
+  const { mortuaryName, mortuaryLogo } = useMortuaryName();
 
   const navigotor = useNavigate();
   let navItems = [];
@@ -71,12 +72,23 @@ export default function Dashboard_Base() {
           {/* Logo */}
           <div className="h-16 flex items-center justify-center border-b border-gray-200 bg-blue-600">
             {sidebarOpen ? (
-              <div className="text-center">
-                <h1 className="text-white font-bold text-lg">MOSC</h1>
-                <p className="text-blue-200 text-xs">Mortuary Management</p>
+              <div className="text-center flex items-center gap-2">
+                {mortuaryLogo ? (
+                  <img src={getUploadUrl(mortuaryLogo)} alt="Logo" className="h-10 w-10 object-contain" />
+                ) : (
+                  <span className="text-white font-bold text-xl">M</span>
+                )}
+                <div>
+                  <h1 className="text-white font-bold text-lg">MOSC</h1>
+                  <p className="text-blue-200 text-xs">Mortuary Management</p>
+                </div>
               </div>
             ) : (
-              <span className="text-white font-bold text-xl">M</span>
+              mortuaryLogo ? (
+                <img src={getUploadUrl(mortuaryLogo)} alt="Logo" className="h-10 w-10 object-contain" />
+              ) : (
+                <span className="text-white font-bold text-xl">M</span>
+              )
             )}
           </div>
 
@@ -130,9 +142,14 @@ export default function Dashboard_Base() {
         <main className="flex-1 overflow-auto">
           {/* Header */}
           <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 sticky top-0 z-10">
-            <div>
-              <h2 className="text-xl font-semibold text-gray-800">Mortuary Management System</h2>
-              <p className="text-sm text-gray-500">{mortuaryName}</p>
+            <div className="flex items-center gap-3">
+              {mortuaryLogo && (
+                <img src={getUploadUrl(mortuaryLogo)} alt="Logo" className="h-10 w-10 object-contain" />
+              )}
+              <div>
+                <h2 className="text-xl font-semibold text-gray-800">Mortuary Management System</h2>
+                <p className="text-sm text-gray-500">{mortuaryName}</p>
+              </div>
             </div>
             <div className="flex items-center gap-4">
               <span className="text-sm text-gray-500">

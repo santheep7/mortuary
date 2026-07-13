@@ -28,7 +28,8 @@ export default function Login() {
  
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    const processedValue = name === 'employeeId' ? value.toUpperCase() : value;
+    setForm((prev) => ({ ...prev, [name]: processedValue }));
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: "" }));
   };
  

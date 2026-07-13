@@ -11,11 +11,15 @@ function SuperAdminDashboard() {
   const [stats, setStats] = useState(null);
   const [admins, setAdmins] = useState([]);
   const [mortuaryName, setMortuaryName] = useState('');
+  const [mortuaryLogo, setMortuaryLogo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showAddAdminModal, setShowAddAdminModal] = useState(false);
   const [showEditMortuaryModal, setShowEditMortuaryModal] = useState(false);
+  const [showUploadLogoModal, setShowUploadLogoModal] = useState(false);
   const [newAdmin, setNewAdmin] = useState({ username: '', email: '', password: '' });
   const [editMortuaryName, setEditMortuaryName] = useState('');
+  const [logoFile, setLogoFile] = useState(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -25,14 +29,16 @@ function SuperAdminDashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      const [statsRes, adminsRes, mortuaryRes] = await Promise.all([
+      const [statsRes, adminsRes, mortuaryRes, logoRes] = await Promise.all([
         axios.get(`${API_BASE}/dashboard/stats`).catch(() => ({ data: null })),
         axios.get(`${API_BASE}/admin/list`).catch(() => ({ data: [] })),
-        axios.get(`${API_BASE}/billing-settings/mortuary-name`).catch(() => ({ data: { mortuary_name: 'MOSC Medical College Mortuary' } }))
+        axios.get(`${API_BASE}/billing-settings/mortuary-name`).catch(() => ({ data: { mortuary_name: 'MOSC Medical College Mortuary' } })),
+        axios.get(`${API_BASE}/billing-settings/mortuary-logo`).catch(() => ({ data: { mortuary_logo: null } }))
       ]);
       setStats(statsRes.data);
       setAdmins(adminsRes.data);
       setMortuaryName(mortuaryRes.data.mortuary_name || 'MOSC Medical College Mortuary');
+      setMortuaryLogo(logoRes.data.mortuary_logo);
     } catch (error) {
       console.error('Error loading superadmin dashboard:', error);
     } finally {
@@ -80,6 +86,33 @@ function SuperAdminDashboard() {
     }
   };
 
+  const handleUploadLogo = async (e) => {
+    e.preventDefault();
+    if (!logoFile) {
+      alert('Please select a logo file');
+      return;
+    }
+
+    setUploadingLogo(true);
+    const formData = new FormData();
+    formData.append('logo', logoFile);
+    formData.append('updated_by', 'SuperAdmin');
+
+    try {
+      await axios.post(`${API_BASE}/billing-settings/mortuary-logo`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setShowUploadLogoModal(false);
+      setLogoFile(null);
+      fetchDashboardData();
+      alert('Logo uploaded successfully');
+    } catch (error) {
+      alert('Error uploading logo: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('role');
     localStorage.removeItem('admin');
@@ -115,13 +148,19 @@ function SuperAdminDashboard() {
             </div>
             <div className="flex items-center gap-3">
               <button
+                onClick={() => setShowUploadLogoModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors"
+              >
+                <Edit size={16} /> Upload Logo
+              </button>
+              <button
                 onClick={() => {
                   setEditMortuaryName(mortuaryName);
                   setShowEditMortuaryModal(true);
                 }}
                 className="flex items-center gap-2 px-4 py-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors"
               >
-                <Edit size={16} /> Edit Mortuary Name
+                <Edit size={16} /> Edit Name
               </button>
               <button
                 onClick={handleLogout}
@@ -350,6 +389,53 @@ function SuperAdminDashboard() {
                   className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
                 >
                   Update Name
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Upload Logo Modal */}
+      {showUploadLogoModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <h3 className="text-lg font-bold text-slate-800 mb-4">Upload Mortuary Logo</h3>
+            {mortuaryLogo && (
+              <div className="mb-4 flex justify-center">
+                <img src={`${API_BASE}${mortuaryLogo}`} alt="Current Logo" className="h-24 w-auto object-contain border rounded" />
+              </div>
+            )}
+            <form onSubmit={handleUploadLogo} className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-slate-700">Logo Image</label>
+                <input
+                  type="file"
+                  required
+                  accept="image/*"
+                  onChange={(e) => setLogoFile(e.target.files[0])}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1"
+                />
+                <p className="text-xs text-slate-500 mt-1">Supported formats: JPG, PNG, JPEG</p>
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowUploadLogoModal(false);
+                    setLogoFile(null);
+                  }}
+                  className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50"
+                  disabled={uploadingLogo}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400"
+                  disabled={uploadingLogo}
+                >
+                  {uploadingLogo ? 'Uploading...' : 'Upload Logo'}
                 </button>
               </div>
             </form>
