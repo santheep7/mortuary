@@ -71,7 +71,7 @@ export async function createBodyRelease(req, res) {
     res.status(201).json({ message: 'Body released successfully', releaseId: id });
   } catch (error) {
     console.error('Body release error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -84,7 +84,8 @@ export async function getBodyRelease(req, res) {
     );
     res.json(release || null);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -145,6 +146,6 @@ export async function getReleaseHistory(req, res) {
     res.json(records);
   } catch (error) {
     console.error('Release history error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }

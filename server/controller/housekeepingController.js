@@ -10,7 +10,8 @@ export async function getTasks(req, res) {
     `);
     res.json(tasks);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -26,7 +27,8 @@ export async function assignTask(req, res) {
     );
     res.json({ message: 'Task assigned successfully' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -38,7 +40,8 @@ export async function completeTask(req, res) {
     await runQuery("UPDATE housekeeping_tasks SET status='COMPLETED' WHERE id=$1", [taskId]);
     res.json({ message: 'Task marked as completed' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -55,6 +58,7 @@ export async function verifyTask(req, res) {
 
     res.json({ message: 'Task verified and cabin is now Available' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }

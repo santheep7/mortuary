@@ -10,7 +10,8 @@ export function uploadNoc(req, res) {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     res.json({ url: `/uploads/${req.file.filename}`, filename: req.file.filename });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -30,7 +31,7 @@ export function uploadMultiple(req, res) {
     res.json({ message: 'Files uploaded successfully', files: uploadedFiles });
   } catch (error) {
     console.error('Error uploading files:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -50,7 +51,7 @@ export function uploadSingle(req, res) {
     });
   } catch (error) {
     console.error('Error uploading file:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -67,6 +68,6 @@ export function listUploads(req, res) {
     res.json({ files });
   } catch (error) {
     console.error('Error reading uploads:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }

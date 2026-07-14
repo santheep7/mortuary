@@ -78,7 +78,7 @@ export async function createAllocation(req, res) {
     res.json(allocation);
   } catch (error) {
     console.error('Error allocating cabin:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -100,7 +100,8 @@ export async function getAllocations(req, res) {
     const allocations = await queryAll(query, params);
     res.json(allocations);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -127,7 +128,8 @@ export async function releaseAllocation(req, res) {
 
     res.json({ message: 'Marked as released successfully', releaseDateTime: new Date().toISOString() });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -147,7 +149,8 @@ export async function extendAllocation(req, res) {
     await runQuery('UPDATE cabin_allocations SET "estimatedReleaseDateTime" = $1 WHERE id = $2', [pgDateTime, id]);
     res.json({ message: 'Estimated release date updated successfully', estimatedReleaseDateTime: pgDateTime });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -197,6 +200,7 @@ export async function calculateAllocation(req, res) {
       dailyRate:     firstDayCharge
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }

@@ -35,7 +35,8 @@ export async function getBilling(req, res) {
 
     res.json(bills);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -85,7 +86,7 @@ export async function getBillingFull(req, res) {
     res.json({ ...bill, services, serviceBill: svcBill });
   } catch (error) {
     console.error('Error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -98,7 +99,8 @@ export async function getBillingByBodyId(req, res) {
     const services = await queryAll('SELECT * FROM billing_services WHERE "billingId" = $1', [billing.id]);
     res.json({ ...billing, services });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -183,7 +185,7 @@ export async function generateBilling(req, res) {
     res.json({ mortuaryBillId: id, serviceBillId });
   } catch (error) {
     console.error('Error generating bills:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -203,7 +205,8 @@ export async function settleBilling(req, res) {
     const updatedBilling = await queryOne('SELECT * FROM billing WHERE id = $1', [id]);
     res.json(updatedBilling);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -284,7 +287,7 @@ export async function getServiceBillingFull(req, res) {
     res.json(svcBill);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -315,6 +318,7 @@ export async function settleServiceBilling(req, res) {
     const updated = await queryOne('SELECT * FROM service_billing WHERE id = $1', [id]);
     res.json(updated);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }

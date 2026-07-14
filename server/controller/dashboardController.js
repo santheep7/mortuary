@@ -51,6 +51,7 @@ export async function getDashboardStats(req, res) {
       serviceDiscount:     Number(serviceDiscounts?.sum || 0)
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }

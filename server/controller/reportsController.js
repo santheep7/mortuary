@@ -40,7 +40,8 @@ export async function getCabinOccupancy(req, res) {
 
     res.json({ data, summary });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -73,7 +74,8 @@ export async function getInvoiceAnalysis(req, res) {
 
     res.json({ data, summary });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -105,6 +107,7 @@ export async function getConcessionReport(req, res) {
 
     res.json({ data, summary });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
