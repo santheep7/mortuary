@@ -14,6 +14,9 @@ import {
   deleteConcessionAuthority
 } from '../controller/bodyController.js';
 import { authenticate, authorize } from '../middleware/auth.js';
+import { compressImage } from '../config/imageCompress.js';
+
+const DOCUMENT_MAX_DIMENSION = 1600;
 
 const router = Router();
 const STAFF = authorize('M Staff', 'House Keeping', 'Admin', 'SuperAdmin');
@@ -33,12 +36,14 @@ router.delete('/concession-authorities/:id', ADMIN, deleteConcessionAuthority);
 router.get('/mlc-registration/:bodyId', STAFF, getMlcRegistration);
 
 // NOC upload
-router.post('/upload/noc', STAFF, upload.single('noc'), (req, res) => {
+router.post('/upload/noc', STAFF, upload.single('noc'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    await compressImage(req.file.path, DOCUMENT_MAX_DIMENSION);
     res.json({ url: `/uploads/${req.file.filename}`, filename: req.file.filename });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 });
 

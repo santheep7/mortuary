@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { queryOne, runQuery } from '../config/db.js';
+import { compressImage } from '../config/imageCompress.js';
 
 export async function getBillingSettings(req, res) {
   try {
@@ -70,6 +71,10 @@ export async function uploadMortuaryLogo(req, res) {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
+
+    // Logo only ever renders small (sidebar icon) - no reason to store it at
+    // full camera/screenshot resolution.
+    await compressImage(req.file.path, 400);
 
     const logoUrl = `/uploads/${req.file.filename}`;
     const updated_by = req.body.updated_by || 'SuperAdmin';
