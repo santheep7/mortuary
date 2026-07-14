@@ -1,5 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
 import { queryAll, queryOne, runQuery } from '../config/db.js';
+import { compressImage } from '../config/imageCompress.js';
+
+const DOCUMENT_MAX_DIMENSION = 1600;
 
 export async function createBodyRelease(req, res) {
   try {
@@ -32,8 +35,13 @@ export async function createBodyRelease(req, res) {
       return res.status(422).json({ error: `Field ${missing} is required` });
     }
 
-    const nocCertificateUrl  = req.files?.nocFile?.[0]?.path || null;
-    const legalDocumentsUrl  = req.files?.legalDocumentsFile?.[0]?.path || null;
+    const nocFile           = req.files?.nocFile?.[0] || null;
+    const legalDocumentsFile = req.files?.legalDocumentsFile?.[0] || null;
+    if (nocFile)            await compressImage(nocFile.path, DOCUMENT_MAX_DIMENSION);
+    if (legalDocumentsFile)  await compressImage(legalDocumentsFile.path, DOCUMENT_MAX_DIMENSION);
+
+    const nocCertificateUrl  = nocFile?.path || null;
+    const legalDocumentsUrl  = legalDocumentsFile?.path || null;
 
     const id = uuidv4();
     await runQuery(`

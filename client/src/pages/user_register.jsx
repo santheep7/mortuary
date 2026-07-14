@@ -19,6 +19,20 @@ const initialForm = {
   password: "",
 };
 
+function getPasswordStrength(password) {
+  let strength = 0;
+  if (password.length >= 8) strength += 1;
+  if (password.length >= 12) strength += 1;
+  if (/[a-z]/.test(password)) strength += 1;
+  if (/[A-Z]/.test(password)) strength += 1;
+  if (/[0-9]/.test(password)) strength += 1;
+  if (/[^a-zA-Z0-9]/.test(password)) strength += 1;
+
+  if (strength <= 2) return { level: 'weak', score: strength, max: 6 };
+  if (strength <= 4) return { level: 'medium', score: strength, max: 6 };
+  return { level: 'strong', score: strength, max: 6 };
+}
+
 function validate(fields) {
   const errors = {};
   if (!fields.fullName.trim()) errors.fullName = "Full name is required.";
@@ -42,8 +56,11 @@ function validate(fields) {
   } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fields.email.trim())) {
     errors.email = "Enter a valid email address.";
   }
-  if (!fields.password || fields.password.length < 8) {
-    errors.password = "Password must be at least 8 characters.";
+  const passwordStrength = getPasswordStrength(fields.password);
+  if (!fields.password) {
+    errors.password = "Password is required.";
+  } else if (passwordStrength.level === 'weak') {
+    errors.password = "Password must be medium or strong.";
   }
   return errors;
 }
@@ -187,8 +204,29 @@ export default function Register() {
           <FormField label="Email" name="email" type="email" value={form.email} onChange={handleChange}
             error={errors.email} placeholder="e.g. john@hospital.in" />
 
-          <FormField label="Password" name="password" value={form.password} onChange={handleChange}
-            error={errors.password} placeholder="Min. 8 characters" autoComplete="new-password" isPassword />
+          <div>
+            <FormField label="Password" name="password" value={form.password} onChange={handleChange}
+              error={errors.password} placeholder="Min. 8 characters" autoComplete="new-password" isPassword />
+            {form.password && (
+              <div className="mt-2">
+                <div className="flex gap-1 h-1.5 mb-1">
+                  <div className={`flex-1 rounded-full transition-colors ${getPasswordStrength(form.password).score >= 1 ? 'bg-red-500' : 'bg-gray-200'}`}></div>
+                  <div className={`flex-1 rounded-full transition-colors ${getPasswordStrength(form.password).score >= 2 ? 'bg-orange-500' : 'bg-gray-200'}`}></div>
+                  <div className={`flex-1 rounded-full transition-colors ${getPasswordStrength(form.password).score >= 3 ? 'bg-yellow-500' : 'bg-gray-200'}`}></div>
+                  <div className={`flex-1 rounded-full transition-colors ${getPasswordStrength(form.password).score >= 4 ? 'bg-green-400' : 'bg-gray-200'}`}></div>
+                  <div className={`flex-1 rounded-full transition-colors ${getPasswordStrength(form.password).score >= 5 ? 'bg-green-500' : 'bg-gray-200'}`}></div>
+                  <div className={`flex-1 rounded-full transition-colors ${getPasswordStrength(form.password).score >= 6 ? 'bg-green-600' : 'bg-gray-200'}`}></div>
+                </div>
+                <p className={`text-xs font-medium ${
+                  getPasswordStrength(form.password).level === 'weak' ? 'text-red-500' :
+                  getPasswordStrength(form.password).level === 'medium' ? 'text-yellow-600' : 'text-green-600'
+                }`}>
+                  Password strength: {getPasswordStrength(form.password).level.charAt(0).toUpperCase() + getPasswordStrength(form.password).level.slice(1)}
+                  {getPasswordStrength(form.password).level === 'weak' && ' (not allowed)'}
+                </p>
+              </div>
+            )}
+          </div>
 
           <div className="flex items-start gap-2.5 bg-blue-50 border border-blue-100 rounded-xl p-3.5 text-xs text-blue-700">
             <svg className="w-4 h-4 shrink-0 mt-0.5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">

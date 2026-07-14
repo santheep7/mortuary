@@ -1,13 +1,19 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import { compressImage } from '../config/imageCompress.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export function uploadNoc(req, res) {
+// Documents (scanned NOC/legal photos etc.) may need to stay legible/zoomable,
+// so they get a wider cap than the logo (400px).
+const DOCUMENT_MAX_DIMENSION = 1600;
+
+export async function uploadNoc(req, res) {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    await compressImage(req.file.path, DOCUMENT_MAX_DIMENSION);
     res.json({ url: `/uploads/${req.file.filename}`, filename: req.file.filename });
   } catch (error) {
     console.error(error);
@@ -15,17 +21,21 @@ export function uploadNoc(req, res) {
   }
 }
 
-export function uploadMultiple(req, res) {
+export async function uploadMultiple(req, res) {
   try {
     if (!req.files || req.files.length === 0)
       return res.status(400).json({ error: 'No files uploaded' });
 
-    const uploadedFiles = req.files.map(file => ({
-      filename:     file.filename,
-      originalName: file.originalname,
-      path:         `/uploads/${file.filename}`,
-      size:         file.size,
-      mimetype:     file.mimetype
+    const uploadedFiles = await Promise.all(req.files.map(async (file) => {
+      await compressImage(file.path, DOCUMENT_MAX_DIMENSION);
+      const { size } = fs.statSync(file.path);
+      return {
+        filename:     file.filename,
+        originalName: file.originalname,
+        path:         `/uploads/${file.filename}`,
+        size,
+        mimetype:     file.mimetype
+      };
     }));
 
     res.json({ message: 'Files uploaded successfully', files: uploadedFiles });
@@ -35,9 +45,12 @@ export function uploadMultiple(req, res) {
   }
 }
 
-export function uploadSingle(req, res) {
+export async function uploadSingle(req, res) {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+    await compressImage(req.file.path, DOCUMENT_MAX_DIMENSION);
+    const { size } = fs.statSync(req.file.path);
 
     res.json({
       message: 'File uploaded successfully',
@@ -45,7 +58,7 @@ export function uploadSingle(req, res) {
         filename:     req.file.filename,
         originalName: req.file.originalname,
         path:         `/uploads/${req.file.filename}`,
-        size:         req.file.size,
+        size,
         mimetype:     req.file.mimetype
       }
     });

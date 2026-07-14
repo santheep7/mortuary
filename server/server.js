@@ -35,6 +35,7 @@ app.use(cors());
 app.use(cookieParser());
 app.use(express.json());
 // Serve uploaded files (logos, images) with authentication
+// Cookies are automatically sent with browser requests, so this works now
 app.use('/uploads', authenticate, express.static(path.join(__dirname, 'uploads')));
 
 // ── API Routes ───────────────────────────────────────────────────────────────

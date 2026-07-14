@@ -6,33 +6,45 @@ import { queryAll, queryOne, runQuery } from '../config/db.js';
 export async function getBilling(req, res) {
   try {
     const { status } = req.query;
+    // LEFT JOIN LATERAL fetches each bill's service-bill info in the same
+    // query instead of 1-2 extra round-trips per bill (was O(n) queries).
+    // Prefers a real service_billing row; falls back to aggregating
+    // billing_services into the same "legacy-<id>" shape the old JS loop
+    // built for bills created before service_billing existed.
     let query = `
-      SELECT b.*, bo."patientName", bo."bodyNumber", bo."bodyType", bo.status AS "bodyStatus"
+      SELECT b.*, bo."patientName", bo."bodyNumber", bo."bodyType", bo.status AS "bodyStatus",
+        COALESCE(
+          to_jsonb(svc),
+          CASE WHEN legacy.charge IS NOT NULL THEN
+            jsonb_build_object(
+              'id', 'legacy-' || b.id,
+              'bodyId', b."bodyId",
+              'billingId', b.id,
+              'serviceName', legacy."serviceName",
+              'serviceAmount', legacy.charge,
+              'discountAmount', 0,
+              'netAmount', legacy.charge,
+              'status', b.status,
+              'createdAt', b."createdAt"
+            )
+          END
+        ) AS "serviceBill"
       FROM billing b
       LEFT JOIN bodies bo ON b."bodyId" = bo.id
+      LEFT JOIN LATERAL (
+        SELECT * FROM service_billing sb WHERE sb."billingId" = b.id LIMIT 1
+      ) svc ON true
+      LEFT JOIN LATERAL (
+        SELECT SUM(amount) AS charge,
+               (array_agg("serviceName" ORDER BY "createdAt"))[1] AS "serviceName"
+        FROM billing_services WHERE "billingId" = b.id
+      ) legacy ON true
     `;
     const params = [];
     if (status) { query += ' WHERE b.status = $1'; params.push(status); }
     query += ' ORDER BY b."createdAt" DESC';
 
     const bills = await queryAll(query, params);
-
-    for (const bill of bills) {
-      let svcBill = await queryOne('SELECT * FROM service_billing WHERE "billingId" = $1', [bill.id]);
-      if (!svcBill) {
-        const services = await queryAll('SELECT * FROM billing_services WHERE "billingId" = $1', [bill.id]);
-        if (services.length > 0) {
-          const charge = services.reduce((sum, s) => sum + Number(s.amount), 0);
-          svcBill = {
-            id: 'legacy-' + bill.id, bodyId: bill.bodyId, billingId: bill.id,
-            serviceName: services[0].serviceName, serviceAmount: charge,
-            discountAmount: 0, netAmount: charge, status: bill.status, createdAt: bill.createdAt
-          };
-        }
-      }
-      bill.serviceBill = svcBill;
-    }
-
     res.json(bills);
   } catch (error) {
     console.error(error);

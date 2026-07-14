@@ -352,6 +352,8 @@ export async function initDatabase() {
       ['idx_service_billing_bodyid',    'service_billing',    '"bodyId"'],
       ['idx_service_billing_billingid', 'service_billing',    '"billingId"'],
       ['idx_billing_services_billingid','billing_services',   '"billingId"'],
+      ['idx_billing_createdat',         'billing',            '"createdAt"'],
+      ['idx_cabin_allocations_admission','cabin_allocations',  '"admissionDateTime"'],
     ];
 
     for (const [name, table, column] of indexes) {
