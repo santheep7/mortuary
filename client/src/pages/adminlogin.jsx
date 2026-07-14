@@ -38,6 +38,7 @@ function AdminLogin() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
+        credentials: 'include',
       });
       const data = await res.json();
 
@@ -48,8 +49,6 @@ function AdminLogin() {
 
       localStorage.setItem("role", "Admin");
       localStorage.setItem("admin", JSON.stringify(data.user));
-      localStorage.setItem("token", data.token);
-      axios.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;
       navigate("/dashboard/admin-dashboard");
     } catch (err) {
       setError("Server error");

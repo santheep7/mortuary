@@ -88,9 +88,16 @@ export async function loginUser(req, res) {
 
     const token = signToken({ id: user.id, role: user.department });
 
+    // Set httpOnly cookie
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 8 * 60 * 60 * 1000 // 8 hours
+    });
+
     return res.status(200).json({
       message: 'Login successful',
-      token,
       user: { id: user.id, fullname: user.full_name, email: user.email, role: user.department }
     });
   } catch (error) {
@@ -115,9 +122,16 @@ export async function loginAdmin(req, res) {
 
     const token = signToken({ id: user.id, role: user.role });
 
+    // Set httpOnly cookie
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 8 * 60 * 60 * 1000 // 8 hours
+    });
+
     res.json({
       message: 'Login successful',
-      token,
       user: { id: user.id, username: user.username, role: user.role }
     });
   } catch (error) {
@@ -145,13 +159,33 @@ export async function loginSuperAdmin(req, res) {
 
     const token = signToken({ id: 'superadmin', role: 'SuperAdmin' });
 
+    // Set httpOnly cookie
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 8 * 60 * 60 * 1000 // 8 hours
+    });
+
     res.json({
       message: 'Login successful',
-      token,
       user: { id: 'superadmin', username: SUPERADMIN_CREDENTIALS.username, role: 'SuperAdmin' }
     });
   } catch (error) {
     console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+}
+
+// ── Logout ─────────────────────────────────────────────────────────────────────
+
+export async function logout(req, res) {
+  try {
+    // Clear the httpOnly cookie
+    res.clearCookie('token');
+    res.json({ message: 'Logout successful' });
+  } catch (error) {
+    console.error('Logout error:', error.message);
     res.status(500).json({ message: 'Server error' });
   }
 }

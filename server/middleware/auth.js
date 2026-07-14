@@ -7,12 +7,18 @@ export function signToken(payload) {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRY });
 }
 
-// Verifies the Bearer token and attaches { id, role } to req.user.
+// Verifies the Bearer token or cookie and attaches { id, role } to req.user.
 // Rejects with 401 if missing or invalid — this is the real check that
 // replaces trusting a client-supplied x-admin-role/x-user-role header.
 export function authenticate(req, res, next) {
+  // Try to get token from Authorization header first (for backward compatibility)
   const header = req.headers['authorization'] || '';
-  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  let token = header.startsWith('Bearer ') ? header.slice(7) : null;
+
+  // If not in header, try to get from cookie
+  if (!token && req.cookies && req.cookies.token) {
+    token = req.cookies.token;
+  }
 
   if (!token) return res.status(401).json({ message: 'Authentication required' });
 

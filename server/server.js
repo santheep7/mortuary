@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import cookieParser from 'cookie-parser';
 
 import { initDatabase } from './config/db.js';
 
@@ -31,8 +32,9 @@ const STAFF = authorize('M Staff', 'House Keeping', 'Admin', 'SuperAdmin');
 
 // ── Middleware ───────────────────────────────────────────────────────────────
 app.use(cors());
+app.use(cookieParser());
 app.use(express.json());
-// Uploaded documents (NOC/legal/MLC files) — require login before serving any file.
+// Serve uploaded files (logos, images) with authentication
 app.use('/uploads', authenticate, express.static(path.join(__dirname, 'uploads')));
 
 // ── API Routes ───────────────────────────────────────────────────────────────
