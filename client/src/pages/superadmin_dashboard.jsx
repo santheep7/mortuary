@@ -306,7 +306,7 @@ function SuperAdminDashboard() {
       {/* Add Admin Modal */}
       {showAddAdminModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold text-slate-800 mb-4">Add New Admin</h3>
             <form onSubmit={handleAddAdmin} className="space-y-4">
               <div>
@@ -361,7 +361,7 @@ function SuperAdminDashboard() {
       {/* Edit Mortuary Name Modal */}
       {showEditMortuaryModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold text-slate-800 mb-4">Edit Mortuary Name</h3>
             <form onSubmit={handleUpdateMortuaryName} className="space-y-4">
               <div>
@@ -401,7 +401,7 @@ function SuperAdminDashboard() {
       {/* Upload Logo Modal */}
       {showUploadLogoModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold text-slate-800 mb-4">Upload Mortuary Logo</h3>
             {mortuaryLogo && (
               <div className="mb-4 flex justify-center">
