@@ -140,15 +140,15 @@ function SuperAdminDashboard() {
       {/* Header */}
       <div className="bg-white border-b border-purple-100 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2 text-xs font-bold text-purple-600 tracking-wider uppercase bg-purple-50 px-2.5 py-1 rounded-full w-fit mb-1">
                 <Shield size={12} /> SuperAdmin Control Center
               </div>
-              <h1 className="text-2xl font-extrabold text-slate-900">SuperAdmin Dashboard</h1>
+              <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900">SuperAdmin Dashboard</h1>
               <p className="text-sm text-slate-500">{mortuaryName}</p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <button
                 onClick={() => setShowUploadLogoModal(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors"
@@ -305,7 +305,7 @@ function SuperAdminDashboard() {
 
       {/* Add Admin Modal */}
       {showAddAdminModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl p-6 w-full max-w-md">
             <h3 className="text-lg font-bold text-slate-800 mb-4">Add New Admin</h3>
             <form onSubmit={handleAddAdmin} className="space-y-4">
@@ -360,7 +360,7 @@ function SuperAdminDashboard() {
 
       {/* Edit Mortuary Name Modal */}
       {showEditMortuaryModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl p-6 w-full max-w-md">
             <h3 className="text-lg font-bold text-slate-800 mb-4">Edit Mortuary Name</h3>
             <form onSubmit={handleUpdateMortuaryName} className="space-y-4">
@@ -400,7 +400,7 @@ function SuperAdminDashboard() {
 
       {/* Upload Logo Modal */}
       {showUploadLogoModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl p-6 w-full max-w-md">
             <h3 className="text-lg font-bold text-slate-800 mb-4">Upload Mortuary Logo</h3>
             {mortuaryLogo && (
