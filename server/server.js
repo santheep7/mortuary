@@ -20,17 +20,20 @@ import settingsRoutes    from './router/settingsRoutes.js';
 import authRoutes        from './router/authRoutes.js';
 import uploadRoutes      from './router/uploadRoutes.js';
 import { getDashboardStats } from './controller/dashboardController.js';
+import { authenticate, authorize } from './middleware/auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
+const STAFF = authorize('M Staff', 'House Keeping', 'Admin', 'SuperAdmin');
 
 // ── Middleware ───────────────────────────────────────────────────────────────
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Uploaded documents (NOC/legal/MLC files) — require login before serving any file.
+app.use('/uploads', authenticate, express.static(path.join(__dirname, 'uploads')));
 
 // ── API Routes ───────────────────────────────────────────────────────────────
 app.use('/api/cabins',             cabinRoutes);
@@ -49,7 +52,7 @@ app.use('/api/upload',             uploadRoutes);
 app.use('/api/uploads',            uploadRoutes);
 
 // Dashboard & health
-app.get('/api/dashboard/stats', getDashboardStats);
+app.get('/api/dashboard/stats', authenticate, STAFF, getDashboardStats);
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
 // ── Start ────────────────────────────────────────────────────────────────────

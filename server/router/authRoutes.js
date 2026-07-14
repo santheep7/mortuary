@@ -7,12 +7,12 @@ import {
   registerAdmin,
   listAdmins,
   deleteAdmin,
-  requireAdmin,
   listUsers,
   getUserById,
   approveUser,
   rejectUser
 } from '../controller/authController.js';
+import { authenticate, authorize } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -28,13 +28,13 @@ router.post('/admin/register', registerAdmin);
 router.post('/superadmin/login', loginSuperAdmin);
 
 // SuperAdmin admin management
-router.get('/admin/list', listAdmins);
-router.delete('/admin/:id', deleteAdmin);
+router.get('/admin/list',    authenticate, authorize('SuperAdmin'), listAdmins);
+router.delete('/admin/:id',  authenticate, authorize('SuperAdmin'), deleteAdmin);
 
-// Admin user management (requires admin header)
-router.get('/admin/users',             requireAdmin, listUsers);
-router.get('/admin/users/:id',         requireAdmin, getUserById);
-router.post('/admin/users/:id/approve', requireAdmin, approveUser);
-router.post('/admin/users/:id/reject',  requireAdmin, rejectUser);
+// Admin user management
+router.get('/admin/users',              authenticate, authorize('Admin', 'SuperAdmin'), listUsers);
+router.get('/admin/users/:id',          authenticate, authorize('Admin', 'SuperAdmin'), getUserById);
+router.post('/admin/users/:id/approve', authenticate, authorize('Admin', 'SuperAdmin'), approveUser);
+router.post('/admin/users/:id/reject',  authenticate, authorize('Admin', 'SuperAdmin'), rejectUser);
 
 export default router;

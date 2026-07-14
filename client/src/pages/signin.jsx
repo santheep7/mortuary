@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import { API_BASE } from "../config.js";
 import AuthShell from "../components/auth/AuthShell";
 import FormField from "../components/auth/FormField";
@@ -58,6 +59,8 @@ export default function Login() {
         setSubmitStatus({ type: "success", message: data.message || "Login successful! Redirecting..." });
         localStorage.setItem("username", data.user.fullname);
         localStorage.setItem("role", data.user.role);
+        localStorage.setItem("token", data.token);
+        axios.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;
 
         if (data.user.role === "House Keeping") {
           navigation("/dashboard/housekeeping");

@@ -2,6 +2,7 @@ import { Outlet } from "react-router-dom";
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from "react-router-dom";
 import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom';
+import axios from 'axios';
 import { useMortuaryName } from '../context/MortuaryNameContext.jsx';
 import { getUploadUrl } from '../config.js';
 import {
@@ -97,8 +98,10 @@ export default function Dashboard_Base() {
             {
               role == "House Keeping" && admin == null ?
                 <button onClick={() => {
-                  localStorage.setItem('role', "");
-                  localStorage.setItem('username', "");
+                  localStorage.removeItem('role');
+                  localStorage.removeItem('username');
+                  localStorage.removeItem('token');
+                  delete axios.defaults.headers.common['Authorization'];
                   navigotor("/")
                 }}>
                   Logout

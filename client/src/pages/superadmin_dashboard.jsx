@@ -116,6 +116,8 @@ function SuperAdminDashboard() {
   const handleLogout = () => {
     localStorage.removeItem('role');
     localStorage.removeItem('admin');
+    localStorage.removeItem('token');
+    delete axios.defaults.headers.common['Authorization'];
     navigate('/superadmin-login');
   };
 

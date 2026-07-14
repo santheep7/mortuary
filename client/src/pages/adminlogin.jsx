@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import { API_BASE } from "../config.js";
 import AuthShell from "../components/auth/AuthShell";
 import FormField from "../components/auth/FormField";
@@ -47,6 +48,8 @@ function AdminLogin() {
 
       localStorage.setItem("role", "Admin");
       localStorage.setItem("admin", JSON.stringify(data.user));
+      localStorage.setItem("token", data.token);
+      axios.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;
       navigate("/dashboard/admin-dashboard");
     } catch (err) {
       setError("Server error");

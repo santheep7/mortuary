@@ -163,9 +163,9 @@ export async function generateBilling(req, res) {
       );
       const serviceId     = dressingService ? dressingService.id : null;
       const approvedTariff = dressingService ? Number(dressingService.tariff) : 500.00;
-      const userRole       = req.headers['x-user-role'] || '';
+      const userRole       = req.user?.role || '';
       let charge           = parseFloat(bodyDressingCharge) || 0;
-      if (userRole !== 'Admin') charge = approvedTariff;
+      if (userRole !== 'Admin' && userRole !== 'SuperAdmin') charge = approvedTariff;
 
       await runQuery(`
         INSERT INTO service_billing
