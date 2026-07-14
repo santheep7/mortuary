@@ -23,7 +23,7 @@ const dummyPatients = [
 
 function BodyRegistration() {
   const [bodies, setBodies] = useState([]);
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(true);
   const [viewMode, setViewMode] = useState('form'); // 'form' or 'list'
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('');
