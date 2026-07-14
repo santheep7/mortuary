@@ -2,39 +2,55 @@ import { queryOne, queryAll } from '../config/db.js';
 
 export async function getDashboardStats(req, res) {
   try {
-    const totalBodies       = await queryOne('SELECT COUNT(*) AS count FROM bodies');
-    const activeAllocations = await queryOne("SELECT COUNT(*) AS count FROM cabin_allocations WHERE status='Allocated'");
-    const pendingMortuary   = await queryOne("SELECT COUNT(*) AS count FROM billing WHERE status='Pending'");
-    const pendingService    = await queryOne("SELECT COUNT(*) AS count FROM service_billing WHERE status='Pending'");
+    // All of these are independent of each other, so they run concurrently
+    // instead of one at a time - was 10 sequential round-trips on every
+    // dashboard load, now the wait is as long as the slowest one, not the
+    // sum of all of them.
+    const [
+      totalBodies,
+      activeAllocations,
+      pendingMortuary,
+      pendingService,
+      releasedToday,
+      readyForRelease,
+      cabinStats,
+      recentBodies,
+      mortuaryRevenue,
+      serviceRevenue,
+      legacySvcRev,
+      mortuaryDiscounts,
+      serviceDiscounts,
+    ] = await Promise.all([
+      queryOne('SELECT COUNT(*) AS count FROM bodies'),
+      queryOne("SELECT COUNT(*) AS count FROM cabin_allocations WHERE status='Allocated'"),
+      queryOne("SELECT COUNT(*) AS count FROM billing WHERE status='Pending'"),
+      queryOne("SELECT COUNT(*) AS count FROM service_billing WHERE status='Pending'"),
+      queryOne("SELECT COUNT(*) AS count FROM body_releases WHERE DATE(\"releaseDateTime\") = CURRENT_DATE"),
+      queryOne("SELECT COUNT(*) AS count FROM bodies WHERE status='Ready for Release'"),
+      queryOne(`
+        SELECT
+          SUM(CASE WHEN status='Available'         THEN 1 ELSE 0 END) AS available,
+          SUM(CASE WHEN status='Occupied'          THEN 1 ELSE 0 END) AS occupied,
+          SUM(CASE WHEN status='Under Maintenance' THEN 1 ELSE 0 END) AS maintenance
+        FROM cabins WHERE status != 'Deactivated'
+      `),
+      queryAll('SELECT * FROM bodies ORDER BY "createdAt" DESC LIMIT 5'),
+      queryOne("SELECT SUM(\"netAmount\") AS sum FROM billing WHERE status='Settled'"),
+      queryOne("SELECT SUM(\"netAmount\") AS sum FROM service_billing WHERE status='Settled'"),
+      queryOne(`
+        SELECT SUM("servicesAmount") AS sum
+        FROM billing
+        WHERE status='Settled'
+          AND id NOT IN (
+            SELECT DISTINCT "billingId" FROM service_billing WHERE "billingId" IS NOT NULL
+          )
+      `),
+      queryOne('SELECT SUM("discountAmount") AS sum FROM billing'),
+      queryOne('SELECT SUM("discountAmount") AS sum FROM service_billing'),
+    ]);
+
     const pendingBillsCount = (Number(pendingMortuary?.count) || 0) + (Number(pendingService?.count) || 0);
-
-    const releasedToday   = await queryOne("SELECT COUNT(*) AS count FROM body_releases WHERE DATE(\"releaseDateTime\") = CURRENT_DATE");
-    const readyForRelease = await queryOne("SELECT COUNT(*) AS count FROM bodies WHERE status='Ready for Release'");
-
-    const cabinStats = await queryOne(`
-      SELECT
-        SUM(CASE WHEN status='Available'         THEN 1 ELSE 0 END) AS available,
-        SUM(CASE WHEN status='Occupied'          THEN 1 ELSE 0 END) AS occupied,
-        SUM(CASE WHEN status='Under Maintenance' THEN 1 ELSE 0 END) AS maintenance
-      FROM cabins WHERE status != 'Deactivated'
-    `);
-
-    const recentBodies = await queryAll('SELECT * FROM bodies ORDER BY "createdAt" DESC LIMIT 5');
-
-    const mortuaryRevenue = await queryOne("SELECT SUM(\"netAmount\") AS sum FROM billing WHERE status='Settled'");
-    const serviceRevenue  = await queryOne("SELECT SUM(\"netAmount\") AS sum FROM service_billing WHERE status='Settled'");
-    const legacySvcRev    = await queryOne(`
-      SELECT SUM("servicesAmount") AS sum
-      FROM billing
-      WHERE status='Settled'
-        AND id NOT IN (
-          SELECT DISTINCT "billingId" FROM service_billing WHERE "billingId" IS NOT NULL
-        )
-    `);
     const totalServiceRevenue = Number(serviceRevenue?.sum || 0) + Number(legacySvcRev?.sum || 0);
-
-    const mortuaryDiscounts = await queryOne('SELECT SUM("discountAmount") AS sum FROM billing');
-    const serviceDiscounts  = await queryOne('SELECT SUM("discountAmount") AS sum FROM service_billing');
 
     res.json({
       totalBodies:       Number(totalBodies?.count || 0),
