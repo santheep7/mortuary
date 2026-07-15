@@ -1,0 +1,15 @@
+# Normalize line endings in the repository to LF regardless of each
+# developer's local git config (autocrlf) or OS. Without this, files
+# committed from different machines end up with mixed CRLF/LF, and later
+# merges between branches show conflicts on lines that never actually
+# changed - just their line endings did.
+* text=auto eol=lf
+
+# Binary files - never touch line endings in these
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
