@@ -37,6 +37,7 @@ const CREATION_PRICING_DEFAULTS = {
 export async function createHospital(req, res) {
   try {
     const { name, contact_email, contact_phone, address, adminUsername, adminPassword } = req.body;
+    let { client_id } = req.body;
 
     if (!name || !name.trim())
       return res.status(400).json({ error: 'Hospital name is required' });
@@ -51,16 +52,30 @@ export async function createHospital(req, res) {
     const existingAdmin = await queryOne('SELECT id FROM admin WHERE username = $1', [adminUsername]);
     if (existingAdmin) return res.status(400).json({ error: 'That admin username is already taken' });
 
+    // Client ID is the short code staff type at registration/login so the
+    // page can show their hospital's own branding - auto-generate one from
+    // the hospital name if SuperAdmin didn't set one explicitly.
+    if (client_id && client_id.trim()) {
+      client_id = client_id.trim().toUpperCase();
+      const existingClientId = await queryOne('SELECT id FROM hospitals WHERE client_id = $1', [client_id]);
+      if (existingClientId) return res.status(400).json({ error: 'That Client ID is already taken' });
+    } else {
+      const prefix = name.trim().replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 4) || 'HOSP';
+      do {
+        client_id = `${prefix}${Math.floor(1000 + Math.random() * 9000)}`;
+      } while (await queryOne('SELECT id FROM hospitals WHERE client_id = $1', [client_id]));
+    }
+
     let logoUrl = null;
     if (req.file) {
       await compressImage(req.file.path, 400);
-      logoUrl = `/uploads/${req.file.filename}`;
+      logoUrl = `/uploads/logos/${req.file.filename}`;
     }
 
     const hospitalId = uuidv4();
     await runQuery(
-      'INSERT INTO hospitals (id, name, logo, contact_email, contact_phone, address) VALUES ($1,$2,$3,$4,$5,$6)',
-      [hospitalId, name.trim(), logoUrl, contact_email || null, contact_phone || null, address || null]
+      'INSERT INTO hospitals (id, name, logo, contact_email, contact_phone, address, client_id) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+      [hospitalId, name.trim(), logoUrl, contact_email || null, contact_phone || null, address || null, client_id]
     );
 
     await runQuery(
@@ -119,6 +134,54 @@ export async function listHospitals(req, res) {
   }
 }
 
+// ── Public: look up a hospital's branding by its Client ID ───────────────────
+// No auth required - this is shown on the register page BEFORE anyone is
+// authenticated, so the page can display the right hospital's name/logo as
+// staff type in their Client ID. Deliberately returns only display data
+// (name, logo) - nothing else about the hospital is exposed here. Field
+// names match the existing mortuary_name/mortuary_logo convention used by
+// settingsController's public branding endpoints.
+export async function getHospitalByClientId(req, res) {
+  try {
+    const { clientId } = req.params;
+    if (!clientId) return res.status(400).json({ error: 'Client ID is required' });
+
+    const hospital = await queryOne(
+      'SELECT name, logo FROM hospitals WHERE client_id = $1 AND is_active = true',
+      [clientId.trim().toUpperCase()]
+    );
+    if (!hospital) return res.status(404).json({ error: 'No hospital found for this Client ID' });
+
+    res.json({ mortuary_name: hospital.name, mortuary_logo: hospital.logo });
+  } catch (error) {
+    console.error('Get hospital by client ID error:', error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
+  }
+}
+
+// ── Public: look up a hospital's branding by an employee's Employee ID ──────
+// Same reasoning as above, but keyed off Employee ID - this is what the
+// login page (as opposed to the register page) uses, since a returning
+// staff member already has an employee_id but wouldn't necessarily know
+// their hospital's Client ID by heart.
+export async function getHospitalByEmployeeId(req, res) {
+  try {
+    const { employeeId } = req.params;
+    if (!employeeId) return res.status(400).json({ error: 'Employee ID is required' });
+
+    const user = await queryOne('SELECT hospital_id FROM users WHERE employee_id = $1', [employeeId.trim()]);
+    if (!user) return res.status(404).json({ error: 'No account found for this Employee ID' });
+
+    const hospital = await queryOne('SELECT name, logo FROM hospitals WHERE id = $1', [user.hospital_id]);
+    if (!hospital) return res.status(404).json({ error: 'No hospital found for this account' });
+
+    res.json({ mortuary_name: hospital.name, mortuary_logo: hospital.logo });
+  } catch (error) {
+    console.error('Get hospital by employee ID error:', error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
+  }
+}
+
 // ── Hospital detail (edit form) ───────────────────────────────────────────────
 export async function getHospital(req, res) {
   try {
@@ -139,9 +202,18 @@ export async function updateHospital(req, res) {
   try {
     const { id } = req.params;
     const { name, contact_email, contact_phone, address, is_active } = req.body;
+    let { client_id } = req.body;
 
     const hospital = await queryOne('SELECT id FROM hospitals WHERE id = $1', [id]);
     if (!hospital) return res.status(404).json({ error: 'Hospital not found' });
+
+    if (client_id !== undefined && client_id !== null && client_id.trim()) {
+      client_id = client_id.trim().toUpperCase();
+      const existingClientId = await queryOne('SELECT id FROM hospitals WHERE client_id = $1 AND id != $2', [client_id, id]);
+      if (existingClientId) return res.status(400).json({ error: 'That Client ID is already taken' });
+    } else {
+      client_id = null;
+    }
 
     const existingSettings = await queryOne('SELECT * FROM system_settings WHERE hospital_id = $1', [id]);
     const pricing = validatePricing(req.body, existingSettings || CREATION_PRICING_DEFAULTS);
@@ -150,7 +222,7 @@ export async function updateHospital(req, res) {
     let logoUrl = null;
     if (req.file) {
       await compressImage(req.file.path, 400);
-      logoUrl = `/uploads/${req.file.filename}`;
+      logoUrl = `/uploads/logos/${req.file.filename}`;
     }
 
     await runQuery(
@@ -161,11 +233,12 @@ export async function updateHospital(req, res) {
          address = COALESCE($4, address),
          is_active = COALESCE($5, is_active),
          logo = COALESCE($6, logo),
+         client_id = COALESCE($7, client_id),
          "updatedAt" = NOW()
-       WHERE id = $7`,
+       WHERE id = $8`,
       [name?.trim() || null, contact_email || null, contact_phone || null, address || null,
        is_active === undefined ? null : (is_active === true || is_active === 'true'),
-       logoUrl, id]
+       logoUrl, client_id, id]
     );
 
     await runQuery(

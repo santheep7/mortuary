@@ -27,7 +27,7 @@ function SuperAdminDashboard() {
   const [showEditHospitalModal, setShowEditHospitalModal] = useState(false);
   const [savingHospital, setSavingHospital] = useState(false);
   const emptyHospitalForm = {
-    name: '', contact_email: '', contact_phone: '', address: '',
+    name: '', contact_email: '', contact_phone: '', address: '', client_id: '',
     pricing_model: 'tiered_flat_hourly', first_day_charge: 2100, hourly_charge_after_24hrs: 130,
     daily_rate: 500, staff_discount_percent: 100,
     adminUsername: '', adminPassword: ''
@@ -96,6 +96,7 @@ function SuperAdminDashboard() {
       contact_email: h.contact_email || '',
       contact_phone: h.contact_phone || '',
       address: h.address || '',
+      client_id: h.client_id || '',
       is_active: h.is_active,
       pricing_model: h.pricing_model || 'tiered_flat_hourly',
       first_day_charge: h.first_day_charge || 2100,
@@ -319,6 +320,7 @@ function SuperAdminDashboard() {
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
                   <th className="px-6 py-3">Name</th>
+                  <th className="px-6 py-3">Client ID</th>
                   <th className="px-6 py-3">Pricing Model</th>
                   <th className="px-6 py-3">Admins</th>
                   <th className="px-6 py-3">Bodies</th>
@@ -331,6 +333,9 @@ function SuperAdminDashboard() {
                   hospitals.map((h) => (
                     <tr key={h.id} className="hover:bg-slate-50">
                       <td className="px-6 py-4 font-medium">{h.name}</td>
+                      <td className="px-6 py-4">
+                        <span className="font-mono text-xs bg-slate-100 px-2 py-1 rounded">{h.client_id}</span>
+                      </td>
                       <td className="px-6 py-4">
                         <span className="px-2 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800">
                           {h.pricing_model === 'flat_daily' ? 'Flat Daily'
@@ -363,7 +368,7 @@ function SuperAdminDashboard() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="6" className="px-6 py-10 text-center text-slate-400">
+                    <td colSpan="7" className="px-6 py-10 text-center text-slate-400">
                       No hospitals onboarded yet
                     </td>
                   </tr>
@@ -494,6 +499,13 @@ function SuperAdminDashboard() {
                   onChange={(e) => setNewHospital({ ...newHospital, name: e.target.value })}
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
               </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700">Client ID</label>
+                <input type="text" value={newHospital.client_id} placeholder="Leave blank to auto-generate"
+                  onChange={(e) => setNewHospital({ ...newHospital, client_id: e.target.value.toUpperCase() })}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
+                <p className="text-xs text-slate-500 mt-1">Staff type this at registration/login to identify this hospital.</p>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-sm font-medium text-slate-700">Contact Email</label>
@@ -608,6 +620,13 @@ function SuperAdminDashboard() {
                 <input type="text" required value={editHospital.name}
                   onChange={(e) => setEditHospital({ ...editHospital, name: e.target.value })}
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700">Client ID</label>
+                <input type="text" value={editHospital.client_id}
+                  onChange={(e) => setEditHospital({ ...editHospital, client_id: e.target.value.toUpperCase() })}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
+                <p className="text-xs text-slate-500 mt-1">Staff type this at registration/login to identify this hospital.</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

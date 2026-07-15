@@ -376,6 +376,10 @@ export async function initDatabase() {
       ['system_settings',        'pricing_model',            "VARCHAR(30) NOT NULL DEFAULT 'tiered_flat_hourly'"],
       ['system_settings',        'daily_rate',               'NUMERIC(10,2) DEFAULT 500.00'],
       ['system_settings',        'staff_discount_percent',   'NUMERIC(5,2) NOT NULL DEFAULT 100'],
+      // Short, human-typeable code staff enter at registration/login so the
+      // page can show their hospital's own name/logo before they're even
+      // authenticated - SuperAdmin assigns one per hospital at onboarding.
+      ['hospitals',              'client_id',                'VARCHAR(50)'],
       ...TENANT_TABLES.map(table => [table, 'hospital_id', 'VARCHAR(36)']),
     ];
 
@@ -406,6 +410,28 @@ export async function initDatabase() {
         [defaultHospitalId, 'MOSC Medical College Mortuary']
       );
       console.log(`Migration: created default hospital (${defaultHospitalId}) for existing data`);
+    }
+
+    // Every hospital needs a client_id (short code staff type at
+    // registration/login to identify their hospital) - backfill any that
+    // don't have one yet with NAME-derived code + a random suffix so it's
+    // unique even if two hospitals share the same first letters.
+    const { rows: hospitalsWithoutClientId } = await pool.query(
+      'SELECT id, name FROM hospitals WHERE client_id IS NULL'
+    );
+    for (const h of hospitalsWithoutClientId) {
+      const prefix = (h.name || 'HOSP').replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 4) || 'HOSP';
+      const suffix = Math.floor(1000 + Math.random() * 9000);
+      await pool.query('UPDATE hospitals SET client_id = $1 WHERE id = $2', [`${prefix}${suffix}`, h.id]);
+      console.log(`Migration: assigned client_id ${prefix}${suffix} to hospital ${h.name}`);
+    }
+
+    try {
+      await pool.query(`
+        ALTER TABLE hospitals ADD CONSTRAINT hospitals_client_id_unique UNIQUE (client_id)
+      `);
+    } catch (err) {
+      console.log('Could not add hospitals client_id unique constraint:', err.message);
     }
 
     for (const table of TENANT_TABLES) {

@@ -73,7 +73,7 @@ export async function uploadMortuaryLogo(req, res) {
     // full camera/screenshot resolution.
     await compressImage(req.file.path, 400);
 
-    const logoUrl = `/uploads/${req.file.filename}`;
+    const logoUrl = `/uploads/logos/${req.file.filename}`;
     const updated_by = req.body.updated_by || 'SuperAdmin';
     const hospitalId = req.hospitalId ?? req.body.hospitalId;
     if (!hospitalId) return res.status(400).json({ error: 'hospitalId is required' });

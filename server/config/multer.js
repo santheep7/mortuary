@@ -35,6 +35,36 @@ const upload = multer({
   }
 });
 
+// Logos are shown on the login/register page before anyone is authenticated
+// (hospital branding preview as staff type their Client ID) - they need to
+// stay in a directory the static file server can serve WITHOUT requiring a
+// login cookie, unlike NOC/legal documents which are real patient records.
+const logoStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const logoDir = path.join(__dirname, '..', 'uploads', 'logos');
+    if (!fs.existsSync(logoDir)) {
+      fs.mkdirSync(logoDir, { recursive: true });
+    }
+    cb(null, logoDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+export const uploadLogo = multer({
+  storage: logoStorage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = /jpeg|jpg|png|webp|gif|bmp/;
+    const ext = allowed.test(path.extname(file.originalname).toLowerCase());
+    const mime = allowed.test(file.mimetype);
+    if (ext && mime) return cb(null, true);
+    cb(new Error(`"${file.originalname}" isn't a supported image type. Allowed: jpg, png, webp, gif, bmp.`));
+  }
+});
+
 // multer's declarative middleware form (upload.single('x') used directly as
 // router middleware) can let a fileFilter rejection turn into an unhandled
 // error deep in multer/busboy's stream internals instead of a clean HTTP

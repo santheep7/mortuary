@@ -22,6 +22,7 @@ import authRoutes        from './router/authRoutes.js';
 import uploadRoutes      from './router/uploadRoutes.js';
 import hospitalRoutes    from './router/hospitalRoutes.js';
 import { getDashboardStats } from './controller/dashboardController.js';
+import { getHospitalByClientId, getHospitalByEmployeeId } from './controller/hospitalController.js';
 import { authenticate, authorize } from './middleware/auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -44,8 +45,16 @@ process.on('unhandledRejection', (err) => console.error('Unhandled rejection (se
 app.use(cors());
 app.use(cookieParser());
 app.use(express.json());
-// Serve uploaded files (logos, images) with authentication
-// Cookies are automatically sent with browser requests, so this works now
+// Logos are branding, shown on the login/register page before anyone is
+// authenticated (hospital preview as staff type their Client ID) - they
+// live in their own public subdirectory so they load without a login
+// cookie. Registered before the general /uploads route below since Express
+// matches path prefixes in order and both share the /uploads prefix.
+app.use('/uploads/logos', express.static(path.join(__dirname, 'uploads', 'logos')));
+
+// Other uploaded documents (NOC/legal files) are real patient records and
+// require authentication. Cookies are automatically sent with browser
+// requests, so this works for <img>/<a> tags too.
 app.use('/uploads', authenticate, express.static(path.join(__dirname, 'uploads')));
 
 // ── API Routes ───────────────────────────────────────────────────────────────
@@ -64,6 +73,13 @@ app.use('/api',                    authRoutes);
 app.use('/api/upload',             uploadRoutes);
 app.use('/api/uploads',            uploadRoutes);
 app.use('/api/superadmin/hospitals', hospitalRoutes);
+
+// Public - shown on the login/register page before anyone's authenticated,
+// so it can display the right hospital's name/logo as staff type their
+// Client ID. Deliberately separate from /api/superadmin/hospitals, which is
+// SuperAdmin-only for everything else.
+app.get('/api/hospitals/by-client-id/:clientId', getHospitalByClientId);
+app.get('/api/hospitals/by-employee-id/:employeeId', getHospitalByEmployeeId);
 
 // Dashboard & health
 app.get('/api/dashboard/stats', authenticate, STAFF, getDashboardStats);

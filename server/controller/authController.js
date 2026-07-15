@@ -129,7 +129,7 @@ export async function changePassword(req, res) {
 
 export async function registerUser(req, res) {
   try {
-    const { fullname, employee_id, department, phone1, phone2, email, password } = req.body;
+    const { fullname, employee_id, department, phone1, phone2, email, password, client_id } = req.body;
 
     if (!fullname || typeof fullname !== 'string' || !fullname.trim())
       return res.status(400).json({ message: 'Full name is required.' });
@@ -149,12 +149,21 @@ export async function registerUser(req, res) {
       return res.status(400).json({ message: 'Invalid email format.' });
     if (!password || password.length < 8)
       return res.status(400).json({ message: 'Password must be at least 8 characters.' });
+    if (!client_id || typeof client_id !== 'string' || !client_id.trim())
+      return res.status(400).json({ message: 'Client ID is required.' });
 
     const cleanEmployeeId = employee_id.trim();
     const cleanEmail      = email.trim().toLowerCase();
     const cleanFullname   = fullname.trim();
     const cleanPhone1     = phone1.trim();
     const cleanPhone2     = phone2 ? phone2.trim() : null;
+    const cleanClientId   = client_id.trim().toUpperCase();
+
+    // The Client ID tells us which hospital this new staff member belongs to
+    // - this is the real fix for a gap noted since Phase 2: registration
+    // previously had no way to attach a new user to the correct hospital.
+    const hospital = await queryOne('SELECT id FROM hospitals WHERE client_id = $1 AND is_active = true', [cleanClientId]);
+    if (!hospital) return res.status(400).json({ message: 'Invalid Client ID.' });
 
     const existingByEmpId = await queryOne('SELECT id FROM users WHERE employee_id = $1', [cleanEmployeeId]);
     if (existingByEmpId) return res.status(400).json({ message: 'Employee ID is already registered.' });
@@ -164,9 +173,9 @@ export async function registerUser(req, res) {
 
     const hash = await bcrypt.hash(password, 12);
     await runQuery(
-      `INSERT INTO users (full_name, employee_id, department, phone1, phone2, email, password, approval_status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')`,
-      [cleanFullname, cleanEmployeeId, department, cleanPhone1, cleanPhone2, cleanEmail, hash]
+      `INSERT INTO users (full_name, employee_id, department, phone1, phone2, email, password, approval_status, hospital_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8)`,
+      [cleanFullname, cleanEmployeeId, department, cleanPhone1, cleanPhone2, cleanEmail, hash, hospital.id]
     );
 
     res.status(201).json({ message: 'Registration submitted. Awaiting admin approval.' });
