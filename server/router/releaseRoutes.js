@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import upload from '../config/multer.js';
+import upload, { safeUpload } from '../config/multer.js';
 import {
   createBodyRelease,
   getBodyRelease,
@@ -12,10 +12,10 @@ const STAFF = authorize('M Staff', 'House Keeping', 'Admin', 'SuperAdmin');
 
 router.use(authenticate);
 
-router.post('/', STAFF, upload.fields([
+router.post('/', STAFF, safeUpload(upload.fields([
   { name: 'nocFile', maxCount: 1 },
   { name: 'legalDocumentsFile', maxCount: 1 }
-]), createBodyRelease);
+])), createBodyRelease);
 
 router.get('/:bodyId', STAFF, getBodyRelease);
 

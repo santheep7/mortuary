@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getBillingSettings, updateBillingSettings, getMortuaryName, updateMortuaryName, uploadMortuaryLogo, getMortuaryLogo } from '../controller/settingsController.js';
-import upload from '../config/multer.js';
+import upload, { safeUpload } from '../config/multer.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 
 const router = Router();
@@ -12,7 +12,7 @@ router.get('/mortuary-name', getMortuaryName);
 router.post('/mortuary-name', authenticate, ADMIN, updateMortuaryName);
 
 router.get('/mortuary-logo', getMortuaryLogo);
-router.post('/mortuary-logo', authenticate, ADMIN, upload.single('logo'), uploadMortuaryLogo);
+router.post('/mortuary-logo', authenticate, ADMIN, safeUpload(upload.single('logo')), uploadMortuaryLogo);
 
 // Staff need to read pricing (e.g. to validate the advance amount when allocating a
 // cabin) even though only Admin/SuperAdmin can change it.
