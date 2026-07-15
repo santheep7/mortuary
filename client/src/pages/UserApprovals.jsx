@@ -294,7 +294,7 @@ export default function UserApprovals() {
       </div>
 
       {/* KPI Row */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
           { label: 'Pending Approval', val: counts.pending,  color: 'text-amber-600  bg-amber-50  border-amber-100',  icon: <Clock size={18} className="text-amber-500" />,        filter: 'pending'  },
           { label: 'Approved',         val: counts.approved, color: 'text-green-600  bg-green-50  border-green-100',  icon: <CheckCircle size={18} className="text-green-500" />,  filter: 'approved' },

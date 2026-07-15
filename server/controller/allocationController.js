@@ -33,6 +33,12 @@ export async function createAllocation(req, res) {
     );
     if (existing) return res.status(400).json({ error: 'Body already has an active cabin allocation' });
 
+    const cabinInUse = await queryOne(
+      "SELECT * FROM cabin_allocations WHERE \"cabinId\" = $1 AND status = 'Allocated'",
+      [cabinId]
+    );
+    if (cabinInUse) return res.status(400).json({ error: 'This cabin is already occupied by another body' });
+
     const bodyRecord = await queryOne('SELECT "bodyType", "freezerRequired" FROM bodies WHERE id = $1', [bodyId]);
     if (bodyRecord && bodyRecord.bodyType === 'MLC' && bodyRecord.freezerRequired === 0) {
       return res.status(400).json({
@@ -72,7 +78,7 @@ export async function createAllocation(req, res) {
     res.json(allocation);
   } catch (error) {
     console.error('Error allocating cabin:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -94,7 +100,8 @@ export async function getAllocations(req, res) {
     const allocations = await queryAll(query, params);
     res.json(allocations);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -109,10 +116,20 @@ export async function releaseAllocation(req, res) {
       return res.status(400).json({ error: 'Bill must be settled before release' });
     }
 
-    await runQuery("UPDATE cabin_allocations SET status = 'Released' WHERE id = $1", [id]);
+    await runQuery(
+      "UPDATE cabin_allocations SET status = 'Released', \"releaseDateTime\" = NOW() WHERE id = $1",
+      [id]
+    );
+    await runQuery("UPDATE cabins SET status = 'NEEDS_CLEANING' WHERE id = $1", [allocation.cabinId]);
+    await runQuery(
+      'INSERT INTO housekeeping_tasks (id, "cabinId", status, "createdAt") VALUES ($1,$2,$3,NOW())',
+      [uuidv4(), allocation.cabinId, 'PENDING']
+    );
+
     res.json({ message: 'Marked as released successfully', releaseDateTime: new Date().toISOString() });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -129,10 +146,11 @@ export async function extendAllocation(req, res) {
       ? new Date(expectedReleaseDateTime).toISOString()
       : null;
 
-    await runQuery('UPDATE cabin_allocations SET "releaseDateTime" = $1 WHERE id = $2', [pgDateTime, id]);
-    res.json({ message: 'Release date updated successfully', releaseDateTime: pgDateTime });
+    await runQuery('UPDATE cabin_allocations SET "estimatedReleaseDateTime" = $1 WHERE id = $2', [pgDateTime, id]);
+    res.json({ message: 'Estimated release date updated successfully', estimatedReleaseDateTime: pgDateTime });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -182,6 +200,7 @@ export async function calculateAllocation(req, res) {
       dailyRate:     firstDayCharge
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }

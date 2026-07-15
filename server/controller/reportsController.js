@@ -1,110 +1,157 @@
-import { queryAll } from '../config/db.js';
+import { queryAll, queryOne } from '../config/db.js';
 
 export async function getCabinOccupancy(req, res) {
   try {
     const { startDate, endDate, cabinNo, bodyType } = req.query;
-    let query = `
-      SELECT
-        ca.*,
-        c."cabinNumber",
-        b."patientName",
-        b."bodyNumber",
-        b."bodyType",
-        ca."admissionDateTime",
-        ca."releaseDateTime",
-        EXTRACT(EPOCH FROM (COALESCE(ca."releaseDateTime", NOW()) - ca."admissionDateTime")) / 3600
-          AS "durationHours"
-      FROM cabin_allocations ca
-      JOIN cabins c ON ca."cabinId" = c.id
-      JOIN bodies b ON ca."bodyId" = b.id
-      WHERE 1=1
-    `;
+    let where = 'WHERE 1=1';
     const params = [];
     let idx = 1;
 
-    if (startDate) { query += ` AND ca."admissionDateTime" >= $${idx++}`; params.push(startDate); }
-    if (endDate)   { query += ` AND ca."admissionDateTime" <= $${idx++}`; params.push(endDate); }
-    if (cabinNo)   { query += ` AND c."cabinNumber" = $${idx++}`;         params.push(cabinNo); }
-    if (bodyType)  { query += ` AND b."bodyType" = $${idx++}`;            params.push(bodyType); }
+    if (startDate) { where += ` AND ca."admissionDateTime" >= $${idx++}`; params.push(startDate); }
+    if (endDate)   { where += ` AND ca."admissionDateTime" <= $${idx++}`; params.push(endDate); }
+    if (cabinNo)   { where += ` AND c."cabinNumber" = $${idx++}`;         params.push(cabinNo); }
+    if (bodyType)  { where += ` AND b."bodyType" = $${idx++}`;            params.push(bodyType); }
 
-    query += ' ORDER BY ca."admissionDateTime" DESC';
-    const data = await queryAll(query, params);
+    // Row-level data and the summary counts run as two parallel queries -
+    // the summary is computed by Postgres (COUNT/FILTER), not by looping
+    // over every row in JS, which used to mean 4 separate .filter() passes
+    // over the entire result set for every report view.
+    const [data, summary] = await Promise.all([
+      queryAll(`
+        SELECT
+          ca.*,
+          c."cabinNumber",
+          b."patientName",
+          b."bodyNumber",
+          b."bodyType",
+          ca."admissionDateTime",
+          ca."releaseDateTime",
+          EXTRACT(EPOCH FROM (COALESCE(ca."releaseDateTime", NOW()) - ca."admissionDateTime")) / 3600
+            AS "durationHours"
+        FROM cabin_allocations ca
+        JOIN cabins c ON ca."cabinId" = c.id
+        JOIN bodies b ON ca."bodyId" = b.id
+        ${where}
+        ORDER BY ca."admissionDateTime" DESC
+      `, params),
+      queryOne(`
+        SELECT
+          COUNT(*) AS "totalAllocations",
+          COUNT(*) FILTER (WHERE ca."releaseDateTime" IS NULL)     AS "occupied",
+          COUNT(*) FILTER (WHERE ca."releaseDateTime" IS NOT NULL) AS "released",
+          COUNT(*) FILTER (WHERE b."bodyType" = 'MLC')             AS "mlcCases",
+          COUNT(*) FILTER (WHERE b."bodyType" = 'Non-MLC')         AS "nonMlcCases"
+        FROM cabin_allocations ca
+        JOIN cabins c ON ca."cabinId" = c.id
+        JOIN bodies b ON ca."bodyId" = b.id
+        ${where}
+      `, params),
+    ]);
 
-    const summary = {
-      totalAllocations: data.length,
-      occupied:    data.filter(d => !d.releaseDateTime).length,
-      released:    data.filter(d =>  d.releaseDateTime).length,
-      mlcCases:    data.filter(d => d.bodyType === 'MLC').length,
-      nonMlcCases: data.filter(d => d.bodyType === 'Non-MLC').length
-    };
-
-    res.json({ data, summary });
+    res.json({
+      data,
+      summary: {
+        totalAllocations: Number(summary.totalAllocations),
+        occupied:    Number(summary.occupied),
+        released:    Number(summary.released),
+        mlcCases:    Number(summary.mlcCases),
+        nonMlcCases: Number(summary.nonMlcCases),
+      },
+    });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
 export async function getInvoiceAnalysis(req, res) {
   try {
     const { startDate, endDate, status } = req.query;
-    let query = `
-      SELECT b.*, bo."patientName", bo."bodyNumber", bo."bodyType"
-      FROM billing b
-      JOIN bodies bo ON b."bodyId" = bo.id
-      WHERE 1=1
-    `;
+    let where = 'WHERE 1=1';
     const params = [];
     let idx = 1;
 
-    if (startDate) { query += ` AND b."createdAt" >= $${idx++}`; params.push(startDate); }
-    if (endDate)   { query += ` AND b."createdAt" <= $${idx++}`; params.push(endDate); }
-    if (status)    { query += ` AND b.status = $${idx++}`;        params.push(status); }
-    query += ' ORDER BY b."createdAt" DESC';
+    if (startDate) { where += ` AND b."createdAt" >= $${idx++}`; params.push(startDate); }
+    if (endDate)   { where += ` AND b."createdAt" <= $${idx++}`; params.push(endDate); }
+    if (status)    { where += ` AND b.status = $${idx++}`;        params.push(status); }
 
-    const data    = await queryAll(query, params);
-    const summary = {
-      totalBills:     data.length,
-      totalAmount:    data.reduce((s, d) => s + (Number(d.totalAmount)  || 0), 0),
-      totalDiscount:  data.reduce((s, d) => s + (Number(d.discountAmount) || 0), 0),
-      totalNetAmount: data.reduce((s, d) => s + (Number(d.netAmount)    || 0), 0),
-      settled: data.filter(d => d.status === 'Settled').length,
-      pending: data.filter(d => d.status === 'Pending').length
-    };
+    const [data, summary] = await Promise.all([
+      queryAll(`
+        SELECT b.*, bo."patientName", bo."bodyNumber", bo."bodyType"
+        FROM billing b
+        JOIN bodies bo ON b."bodyId" = bo.id
+        ${where}
+        ORDER BY b."createdAt" DESC
+      `, params),
+      queryOne(`
+        SELECT
+          COUNT(*) AS "totalBills",
+          COALESCE(SUM(b."totalAmount"), 0)    AS "totalAmount",
+          COALESCE(SUM(b."discountAmount"), 0) AS "totalDiscount",
+          COALESCE(SUM(b."netAmount"), 0)      AS "totalNetAmount",
+          COUNT(*) FILTER (WHERE b.status = 'Settled') AS "settled",
+          COUNT(*) FILTER (WHERE b.status = 'Pending') AS "pending"
+        FROM billing b
+        JOIN bodies bo ON b."bodyId" = bo.id
+        ${where}
+      `, params),
+    ]);
 
-    res.json({ data, summary });
+    res.json({
+      data,
+      summary: {
+        totalBills:     Number(summary.totalBills),
+        totalAmount:    Number(summary.totalAmount),
+        totalDiscount:  Number(summary.totalDiscount),
+        totalNetAmount: Number(summary.totalNetAmount),
+        settled: Number(summary.settled),
+        pending: Number(summary.pending),
+      },
+    });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
 export async function getConcessionReport(req, res) {
   try {
     const { startDate, endDate } = req.query;
-    let query = `
-      SELECT
-        b.id, b."discountAmount", b."discountReason", b."createdAt",
-        bo."patientName", bo."bodyNumber",
-        ca.name AS "authorityName", ca.designation
-      FROM billing b
-      JOIN bodies bo ON b."bodyId" = bo.id
-      LEFT JOIN concession_authorities ca ON b."concessionAuthorityId" = ca.id
-      WHERE b."discountAmount" > 0
-    `;
+    let where = 'WHERE b."discountAmount" > 0';
     const params = [];
     let idx = 1;
 
-    if (startDate) { query += ` AND b."createdAt" >= $${idx++}`; params.push(startDate); }
-    if (endDate)   { query += ` AND b."createdAt" <= $${idx++}`; params.push(endDate); }
-    query += ' ORDER BY b."createdAt" DESC';
+    if (startDate) { where += ` AND b."createdAt" >= $${idx++}`; params.push(startDate); }
+    if (endDate)   { where += ` AND b."createdAt" <= $${idx++}`; params.push(endDate); }
 
-    const data    = await queryAll(query, params);
-    const summary = {
-      totalConcessions: data.length,
-      totalAmount: data.reduce((s, d) => s + (Number(d.discountAmount) || 0), 0)
-    };
+    const [data, summary] = await Promise.all([
+      queryAll(`
+        SELECT
+          b.id, b."discountAmount", b."discountReason", b."createdAt",
+          bo."patientName", bo."bodyNumber",
+          ca.name AS "authorityName", ca.designation
+        FROM billing b
+        JOIN bodies bo ON b."bodyId" = bo.id
+        LEFT JOIN concession_authorities ca ON b."concessionAuthorityId" = ca.id
+        ${where}
+        ORDER BY b."createdAt" DESC
+      `, params),
+      queryOne(`
+        SELECT COUNT(*) AS "totalConcessions", COALESCE(SUM(b."discountAmount"), 0) AS "totalAmount"
+        FROM billing b
+        ${where}
+      `, params),
+    ]);
 
-    res.json({ data, summary });
+    res.json({
+      data,
+      summary: {
+        totalConcessions: Number(summary.totalConcessions),
+        totalAmount: Number(summary.totalAmount),
+      },
+    });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }

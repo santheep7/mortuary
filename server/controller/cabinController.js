@@ -6,7 +6,8 @@ export async function getCabins(req, res) {
     const cabins = await queryAll('SELECT * FROM cabins ORDER BY "cabinNumber"');
     res.json(cabins);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -24,7 +25,8 @@ export async function createCabin(req, res) {
     const cabin = await queryOne('SELECT * FROM cabins WHERE id = $1', [id]);
     res.json(cabin);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -42,7 +44,8 @@ export async function updateCabin(req, res) {
     const cabin = await queryOne('SELECT * FROM cabins WHERE id = $1', [id]);
     res.json(cabin);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -52,6 +55,7 @@ export async function deleteCabin(req, res) {
     await runQuery("UPDATE cabins SET status = 'Deactivated' WHERE id = $1", [id]);
     res.json({ message: 'Cabin deactivated' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }

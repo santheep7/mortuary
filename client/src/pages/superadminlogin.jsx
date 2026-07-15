@@ -1,21 +1,25 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import logo1 from './images/logo1.png';
-import { API_BASE } from '../config.js';
+import axios from "axios";
+import { API_BASE } from "../config.js";
+import AuthShell from "../components/auth/AuthShell";
+import FormField from "../components/auth/FormField";
+import StatusBanner from "../components/auth/StatusBanner";
+
+const KEY_ICON = "M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z";
+const USER_ICON = "M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0";
+const LOCK_ICON = "M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z";
 
 function SuperAdminLogin() {
-  const [form, setForm] = useState({
-    username: "",
-    password: "",
-  });
-
+  const [form, setForm] = useState({ username: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
   const navigate = useNavigate();
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+    if (error) setError("");
   };
 
   const handleSubmit = async (e) => {
@@ -32,33 +36,22 @@ function SuperAdminLogin() {
     try {
       const res = await fetch(`${API_BASE}/superadmin/login`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-
       const data = await res.json();
-      console.log('SuperAdmin login response:', data);
 
       if (!res.ok) {
         setError(data.message || "Invalid credentials");
         return;
       }
 
-      // Save superadmin session
-      localStorage.setItem('role', 'SuperAdmin');
+      localStorage.setItem("role", "SuperAdmin");
       localStorage.setItem("admin", JSON.stringify(data.user));
-      console.log('Session saved, redirecting to /dashboard/superadmin-dashboard');
-
-      // Clear loading before navigation
-      setLoading(false);
-
-      // Redirect
+      localStorage.setItem("token", data.token);
+      axios.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;
       navigate("/dashboard/superadmin-dashboard");
-
     } catch (err) {
-      console.error('Login error:', err);
       setError("Server error");
     } finally {
       setLoading(false);
@@ -66,63 +59,41 @@ function SuperAdminLogin() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-r from-purple-600 to-indigo-600">
-      <div className="bg-white p-8 rounded-xl shadow-lg w-full max-w-md">
+    <AuthShell iconPath={KEY_ICON} title="SuperAdmin Login" subtitle="System-level access for maintaining this app" portalLabel="SuperAdmin Portal">
+      <StatusBanner type="error" message={error} />
 
-        <h2 className="text-2xl font-bold text-center mb-6 text-purple-700">SuperAdmin Login</h2>
+      <form onSubmit={handleSubmit} noValidate className="space-y-5">
+        <FormField label="Username" name="username" value={form.username} onChange={handleChange}
+          placeholder="Enter superadmin username" autoComplete="username" iconPath={USER_ICON} />
 
-        {error && (
-          <div className="bg-red-100 text-red-600 p-2 rounded mb-4 text-sm">
-            {error}
-          </div>
-        )}
+        <FormField label="Password" name="password" value={form.password} onChange={handleChange}
+          placeholder="Enter password" autoComplete="current-password" iconPath={LOCK_ICON} isPassword />
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full py-2.5 px-4 rounded-lg text-sm font-semibold text-white
+            bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98]
+            transition-all shadow-md shadow-indigo-200
+            disabled:opacity-60 disabled:cursor-not-allowed
+            flex items-center justify-center gap-2 mt-2"
+        >
+          {loading ? "Logging in..." : "Login as SuperAdmin"}
+        </button>
+      </form>
 
-          <div>
-            <label className="text-sm font-medium text-gray-700">Username</label>
-            <input
-              type="text"
-              name="username"
-              value={form.username}
-              onChange={handleChange}
-              className="w-full border border-gray-300 px-3 py-2 rounded mt-1 focus:outline-none focus:ring-2 focus:ring-purple-500"
-              placeholder="Enter superadmin username"
-            />
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-gray-700">Password</label>
-            <input
-              type="password"
-              name="password"
-              value={form.password}
-              onChange={handleChange}
-              className="w-full border border-gray-300 px-3 py-2 rounded mt-1 focus:outline-none focus:ring-2 focus:ring-purple-500"
-              placeholder="Enter password"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-purple-600 text-white py-2 rounded hover:bg-purple-700 transition-colors disabled:bg-gray-400"
-          >
-            {loading ? "Logging in..." : "Login as SuperAdmin"}
-          </button>
-
-        </form>
-
-        <div className="mt-4 text-center">
-          <button
-            onClick={() => navigate("/admin-login")}
-            className="text-sm text-purple-600 hover:text-purple-800"
-          >
-            Back to Admin Login
-          </button>
-        </div>
+      <div className="flex items-center gap-3 my-6">
+        <div className="flex-1 h-px bg-gray-100" />
+        <div className="flex-1 h-px bg-gray-100" />
       </div>
-    </div>
+
+      <a href="/admin-login"
+        className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-lg
+          border border-gray-200 text-sm font-medium text-gray-600
+          bg-white hover:bg-gray-50 hover:border-gray-300 transition-all">
+        Back to Admin Login
+      </a>
+    </AuthShell>
   );
 }
 

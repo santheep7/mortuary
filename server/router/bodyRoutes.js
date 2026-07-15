@@ -13,36 +13,46 @@ import {
   createConcessionAuthority,
   deleteConcessionAuthority
 } from '../controller/bodyController.js';
+import { authenticate, authorize } from '../middleware/auth.js';
+import { compressImage } from '../config/imageCompress.js';
+
+const DOCUMENT_MAX_DIMENSION = 1600;
 
 const router = Router();
+const STAFF = authorize('M Staff', 'House Keeping', 'Admin', 'SuperAdmin');
+const ADMIN = authorize('Admin', 'SuperAdmin');
+
+router.use(authenticate);
 
 // Body types
-router.get('/body-types', getBodyTypes);
+router.get('/body-types', STAFF, getBodyTypes);
 
-// Concession authorities
-router.get('/concession-authorities',        getConcessionAuthorities);
-router.post('/concession-authorities',       createConcessionAuthority);
-router.delete('/concession-authorities/:id', deleteConcessionAuthority);
+// Concession authorities (discount approval setup — administrative)
+router.get('/concession-authorities',        STAFF, getConcessionAuthorities);
+router.post('/concession-authorities',       ADMIN, createConcessionAuthority);
+router.delete('/concession-authorities/:id', ADMIN, deleteConcessionAuthority);
 
 // MLC registration document
-router.get('/mlc-registration/:bodyId', getMlcRegistration);
+router.get('/mlc-registration/:bodyId', STAFF, getMlcRegistration);
 
 // NOC upload
-router.post('/upload/noc', upload.single('noc'), (req, res) => {
+router.post('/upload/noc', STAFF, upload.single('noc'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    await compressImage(req.file.path, DOCUMENT_MAX_DIMENSION);
     res.json({ url: `/uploads/${req.file.filename}`, filename: req.file.filename });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 });
 
 // Bodies CRUD
-router.get('/',               getBodies);
-router.get('/:id',            getBodyById);
-router.get('/:id/allocation', getBodyAllocation);
-router.post('/',              createBody);
-router.put('/:id',            updateBody);
-router.delete('/:id',         deleteBody);
+router.get('/',               STAFF, getBodies);
+router.get('/:id',            STAFF, getBodyById);
+router.get('/:id/allocation', STAFF, getBodyAllocation);
+router.post('/',              STAFF, createBody);
+router.put('/:id',            STAFF, updateBody);
+router.delete('/:id',         ADMIN, deleteBody);
 
 export default router;

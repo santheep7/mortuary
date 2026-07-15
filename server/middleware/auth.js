@@ -1,0 +1,35 @@
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_EXPIRY = '8h';
+
+export function signToken(payload) {
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRY });
+}
+
+// Verifies the Bearer token and attaches { id, role } to req.user.
+// Rejects with 401 if missing or invalid — this is the real check that
+// replaces trusting a client-supplied x-admin-role/x-user-role header.
+export function authenticate(req, res, next) {
+  const header = req.headers['authorization'] || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+
+  if (!token) return res.status(401).json({ message: 'Authentication required' });
+
+  try {
+    req.user = jwt.verify(token, JWT_SECRET);
+    next();
+  } catch (error) {
+    return res.status(401).json({ message: 'Invalid or expired session' });
+  }
+}
+
+// Use after authenticate. Rejects with 403 if req.user.role isn't in allowedRoles.
+export function authorize(...allowedRoles) {
+  return (req, res, next) => {
+    if (!req.user || !allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ message: 'You do not have permission to perform this action' });
+    }
+    next();
+  };
+}

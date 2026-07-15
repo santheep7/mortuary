@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { queryOne, runQuery } from '../config/db.js';
+import { compressImage } from '../config/imageCompress.js';
 
 export async function getBillingSettings(req, res) {
   try {
@@ -15,7 +16,8 @@ export async function getBillingSettings(req, res) {
     }
     res.json(settings);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -27,7 +29,8 @@ export async function getMortuaryName(req, res) {
     }
     res.json({ mortuary_name: settings.mortuary_name });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -58,7 +61,8 @@ export async function updateMortuaryName(req, res) {
     const updatedSettings = await queryOne('SELECT mortuary_name FROM system_settings WHERE id = $1', [id]);
     res.json({ message: 'Mortuary name updated successfully', mortuary_name: updatedSettings.mortuary_name });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -67,6 +71,10 @@ export async function uploadMortuaryLogo(req, res) {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
+
+    // Logo only ever renders small (sidebar icon) - no reason to store it at
+    // full camera/screenshot resolution.
+    await compressImage(req.file.path, 400);
 
     const logoUrl = `/uploads/${req.file.filename}`;
     const updated_by = req.body.updated_by || 'SuperAdmin';
@@ -89,7 +97,8 @@ export async function uploadMortuaryLogo(req, res) {
     const updatedSettings = await queryOne('SELECT mortuary_logo FROM system_settings WHERE id = $1', [id]);
     res.json({ message: 'Logo uploaded successfully', mortuary_logo: updatedSettings.mortuary_logo });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -101,7 +110,8 @@ export async function getMortuaryLogo(req, res) {
     }
     res.json({ mortuary_logo: settings.mortuary_logo });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -136,6 +146,7 @@ export async function updateBillingSettings(req, res) {
     const updatedSettings = await queryOne('SELECT * FROM system_settings WHERE id = $1', [id]);
     res.json({ message: 'Settings updated successfully', settings: updatedSettings });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }

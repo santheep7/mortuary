@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcrypt';
 import { pool, queryOne, runQuery, queryAll } from '../config/db.js';
+import { signToken } from '../middleware/auth.js';
 
 const ALLOWED_DEPARTMENTS = ['House Keeping', 'M Staff'];
 
@@ -85,8 +86,11 @@ export async function loginUser(req, res) {
       return res.status(403).json({ message: 'Your registration has been rejected. Please contact the admin for further assistance.' });
     }
 
+    const token = signToken({ id: user.id, role: user.department });
+
     return res.status(200).json({
       message: 'Login successful',
+      token,
       user: { id: user.id, fullname: user.full_name, email: user.email, role: user.department }
     });
   } catch (error) {
@@ -109,8 +113,11 @@ export async function loginAdmin(req, res) {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ message: 'Invalid password' });
 
+    const token = signToken({ id: user.id, role: user.role });
+
     res.json({
       message: 'Login successful',
+      token,
       user: { id: user.id, username: user.username, role: user.role }
     });
   } catch (error) {
@@ -136,8 +143,11 @@ export async function loginSuperAdmin(req, res) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
+    const token = signToken({ id: 'superadmin', role: 'SuperAdmin' });
+
     res.json({
       message: 'Login successful',
+      token,
       user: { id: 'superadmin', username: SUPERADMIN_CREDENTIALS.username, role: 'SuperAdmin' }
     });
   } catch (error) {
@@ -207,13 +217,6 @@ export async function deleteAdmin(req, res) {
 }
 
 // ── Admin user management ────────────────────────────────────────────────────
-
-export function requireAdmin(req, res, next) {
-  if (req.headers['x-admin-role'] !== 'Admin') {
-    return res.status(403).json({ message: 'Forbidden: Admin access required.' });
-  }
-  next();
-}
 
 export async function listUsers(req, res) {
   try {

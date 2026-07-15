@@ -20,16 +20,29 @@ import settingsRoutes    from './router/settingsRoutes.js';
 import authRoutes        from './router/authRoutes.js';
 import uploadRoutes      from './router/uploadRoutes.js';
 import { getDashboardStats } from './controller/dashboardController.js';
+import { authenticate, authorize } from './middleware/auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
+const STAFF = authorize('M Staff', 'House Keeping', 'Admin', 'SuperAdmin');
 
 // ── Middleware ───────────────────────────────────────────────────────────────
 app.use(cors());
 app.use(express.json());
+// Uploaded documents (NOC/legal/MLC files, mortuary logo). NOT gated behind
+// authenticate: the frontend loads these via plain <img src> and <a href>,
+// which are native browser requests that cannot carry a custom Authorization
+// header - gating this route broke every image/document display in the app
+// (discovered when the SuperAdmin logo upload succeeded but never rendered).
+// Protection instead relies on filenames being random/unguessable
+// (timestamp-random.ext, not sequential) combined with the file *listing*
+// endpoint (GET /api/upload) staying locked to Admin/SuperAdmin, so there's
+// no way to discover a filename to exploit in the first place. Revisit this
+// properly (e.g. HttpOnly cookie auth, which does ride along with native
+// requests) if that trade-off ever stops being acceptable.
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ── API Routes ───────────────────────────────────────────────────────────────
@@ -49,14 +62,14 @@ app.use('/api/upload',             uploadRoutes);
 app.use('/api/uploads',            uploadRoutes);
 
 // Dashboard & health
-app.get('/api/dashboard/stats', getDashboardStats);
+app.get('/api/dashboard/stats', authenticate, STAFF, getDashboardStats);
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
 // ── Start ────────────────────────────────────────────────────────────────────
 initDatabase().then(() => {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Mortuary Management System running on port ${PORT}`);
-    console.log(`Connected to MySQL database: mortuary_db`);
+    console.log(`Connected to PostgreSQL database: ${process.env.PG_DATABASE}`);
     console.log(`Access on LAN: http://<SERVER_IP>:${PORT}`);
   });
 }).catch(err => {

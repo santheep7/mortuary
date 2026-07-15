@@ -6,41 +6,46 @@ export async function getBodyTypes(req, res) {
     const types = await queryAll('SELECT * FROM body_types');
     res.json(types);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
 export async function getBodies(req, res) {
   try {
     const { status, bodyType, search } = req.query;
-    let query  = 'SELECT * FROM bodies WHERE 1=1';
-    const params = [];
-    let idx = 1;
-
-    if (status)   { query += ` AND status = $${idx++}`;     params.push(status); }
-    if (bodyType) { query += ` AND "bodyType" = $${idx++}`; params.push(bodyType); }
-    if (search) {
-      query += ` AND ("patientName" ILIKE $${idx} OR "bodyNumber" ILIKE $${idx+1} OR "hospitalNumber" ILIKE $${idx+2})`;
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
-      idx += 3;
-    }
-    query += ' ORDER BY "createdAt" DESC';
-
-    const bodies = await queryAll(query, params);
-
-    for (const body of bodies) {
-      body.allocation = await queryOne(`
+    // LEFT JOIN LATERAL fetches each body's latest allocation in the same
+    // query instead of one extra round-trip per body (was O(n) queries).
+    let query = `
+      SELECT b.*, to_jsonb(alloc) AS allocation
+      FROM bodies b
+      LEFT JOIN LATERAL (
         SELECT ca.*, c."cabinNumber"
         FROM cabin_allocations ca
         JOIN cabins c ON ca."cabinId" = c.id
-        WHERE ca."bodyId" = $1
-        ORDER BY ca."createdAt" DESC LIMIT 1
-      `, [body.id]);
-    }
+        WHERE ca."bodyId" = b.id
+        ORDER BY ca."createdAt" DESC
+        LIMIT 1
+      ) alloc ON true
+      WHERE 1=1
+    `;
+    const params = [];
+    let idx = 1;
 
+    if (status)   { query += ` AND b.status = $${idx++}`;     params.push(status); }
+    if (bodyType) { query += ` AND b."bodyType" = $${idx++}`; params.push(bodyType); }
+    if (search) {
+      query += ` AND (b."patientName" ILIKE $${idx} OR b."bodyNumber" ILIKE $${idx+1} OR b."hospitalNumber" ILIKE $${idx+2})`;
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+      idx += 3;
+    }
+    query += ' ORDER BY b."createdAt" DESC';
+
+    const bodies = await queryAll(query, params);
     res.json(bodies);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -61,7 +66,8 @@ export async function getBodyById(req, res) {
     const billing = await queryOne('SELECT * FROM billing WHERE "bodyId" = $1', [id]);
     res.json({ ...body, allocation, billing });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -79,7 +85,8 @@ export async function getBodyAllocation(req, res) {
     if (!allocation) return res.status(404).json({ error: 'No allocation found for this body' });
     res.json(allocation);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -132,7 +139,7 @@ export async function createBody(req, res) {
     res.json(body);
   } catch (error) {
     console.error('Error registering body:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -167,7 +174,8 @@ export async function updateBody(req, res) {
     const body = await queryOne('SELECT * FROM bodies WHERE id = $1', [id]);
     res.json(body);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -190,7 +198,7 @@ export async function deleteBody(req, res) {
     res.json({ message: 'Body deleted successfully' });
   } catch (error) {
     console.error('DELETE BODY ERROR:', error);
-    res.status(500).json({ error: 'Internal server error', details: error.message });
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -205,7 +213,7 @@ export async function getMlcRegistration(req, res) {
     res.json(body);
   } catch (error) {
     console.error('MLC REGISTRATION ERROR:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -214,7 +222,8 @@ export async function getConcessionAuthorities(req, res) {
     const authorities = await queryAll('SELECT * FROM concession_authorities WHERE "isActive" = 1');
     res.json(authorities);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -229,7 +238,8 @@ export async function createConcessionAuthority(req, res) {
     const authority = await queryOne('SELECT * FROM concession_authorities WHERE id = $1', [id]);
     res.json(authority);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -239,6 +249,7 @@ export async function deleteConcessionAuthority(req, res) {
     await runQuery('UPDATE concession_authorities SET "isActive" = 0 WHERE id = $1', [id]);
     res.json({ message: 'Concession authority deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: error.message, error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }

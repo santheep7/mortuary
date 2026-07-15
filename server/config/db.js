@@ -338,6 +338,32 @@ export async function initDatabase() {
       }
     }
 
+    // ── Indexes on frequently-filtered/joined columns ────────────────────────
+    const indexes = [
+      ['idx_cabin_allocations_bodyid',  'cabin_allocations',  '"bodyId"'],
+      ['idx_cabin_allocations_cabinid', 'cabin_allocations',  '"cabinId"'],
+      ['idx_cabin_allocations_status',  'cabin_allocations',  'status'],
+      ['idx_billing_bodyid',            'billing',            '"bodyId"'],
+      ['idx_billing_status',            'billing',            'status'],
+      ['idx_body_releases_bodyid',      'body_releases',      '"bodyId"'],
+      ['idx_bodies_status',             'bodies',             'status'],
+      ['idx_bodies_billing_status',     'bodies',             'billing_status'],
+      ['idx_housekeeping_cabinid',      'housekeeping_tasks', '"cabinId"'],
+      ['idx_service_billing_bodyid',    'service_billing',    '"bodyId"'],
+      ['idx_service_billing_billingid', 'service_billing',    '"billingId"'],
+      ['idx_billing_services_billingid','billing_services',   '"billingId"'],
+      ['idx_billing_createdat',         'billing',            '"createdAt"'],
+      ['idx_cabin_allocations_admission','cabin_allocations',  '"admissionDateTime"'],
+    ];
+
+    for (const [name, table, column] of indexes) {
+      try {
+        await pool.query(`CREATE INDEX IF NOT EXISTS ${name} ON ${table} (${column})`);
+      } catch (err) {
+        console.log(`Index skip (${name}):`, err.message);
+      }
+    }
+
     // ── Seed defaults ─────────────────────────────────────────────────────────
     const { rows: settingsRows } = await pool.query('SELECT COUNT(*) AS count FROM system_settings');
     if (parseInt(settingsRows[0].count) === 0) {
