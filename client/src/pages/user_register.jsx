@@ -144,8 +144,11 @@ export default function Register() {
         fullname: form.fullName.trim(),
         employee_id: form.employeeId.trim(),
         department: form.department,
-        phone1: form.phone1.trim(),
-        phone2: form.phone2.trim() || "",
+        // phone1/phone2 are hyphen-formatted for display (e.g. 987-654-3210)
+        // but the server expects a plain 10-digit number - strip formatting
+        // before sending, same as validate() already does for the client-side check.
+        phone1: form.phone1.replace(/\D/g, ''),
+        phone2: form.phone2 ? form.phone2.replace(/\D/g, '') : "",
         email: form.email.trim(),
         password: form.password,
       };
