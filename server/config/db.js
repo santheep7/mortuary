@@ -304,7 +304,36 @@ export async function initDatabase() {
       )
     `);
 
+    // ── Multi-tenancy: hospitals table ───────────────────────────────────────
+    // Phase 1 of the multi-hospital rework: one SuperAdmin managing many
+    // hospital clients from a shared database. This table + the hospital_id
+    // backfill below are the foundation everything else builds on (auth,
+    // per-hospital pricing, and Row-Level Security come in later steps -
+    // deliberately not bundled into this same migration).
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hospitals (
+        id            VARCHAR(36) PRIMARY KEY,
+        name          VARCHAR(255) NOT NULL,
+        logo          TEXT,
+        contact_email VARCHAR(150),
+        contact_phone VARCHAR(20),
+        address       TEXT,
+        is_active     BOOLEAN DEFAULT true,
+        "createdAt"   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt"   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // ── Idempotent column migrations ─────────────────────────────────────────
+    const TENANT_TABLES = [
+      'users', 'admin', 'bodies', 'cabins', 'cabin_allocations', 'billing',
+      'billing_services', 'service_billing', 'service_master',
+      'concession_authorities', 'housekeeping_tasks', 'body_releases',
+      'system_settings',
+    ];
+    // Note: body_types is deliberately excluded - it's a fixed universal
+    // vocabulary (MLC / Non-MLC), not hospital-specific data.
+
     const colMigrations = [
       // table, column, pg_type
       ['cabins',                 'cabin_type',               "VARCHAR(20) DEFAULT 'NORMAL_CABIN'"],
@@ -323,6 +352,7 @@ export async function initDatabase() {
       ['users',                  'updated_at',               'TIMESTAMP DEFAULT CURRENT_TIMESTAMP'],
       ['system_settings',        'mortuary_name',            "VARCHAR(255) DEFAULT 'MOSC Medical College Mortuary'"],
       ['system_settings',        'mortuary_logo',            'TEXT'],
+      ...TENANT_TABLES.map(table => [table, 'hospital_id', 'VARCHAR(36)']),
     ];
 
     for (const [table, column, type] of colMigrations) {
@@ -335,6 +365,55 @@ export async function initDatabase() {
         }
       } catch (err) {
         console.log(`Migration skip (${table}.${column}):`, err.message);
+      }
+    }
+
+    // ── Backfill existing data into a default hospital ──────────────────────
+    // Ensure at least one hospital always exists (the pre-multi-tenant data's
+    // new home), then backfill any rows still missing hospital_id. Safe to
+    // run on every startup - once nothing is NULL, the backfill is a no-op.
+    let { rows: existingHospital } = await pool.query('SELECT id FROM hospitals LIMIT 1');
+    let defaultHospitalId = existingHospital[0]?.id;
+
+    if (!defaultHospitalId) {
+      defaultHospitalId = uuidv4();
+      await pool.query(
+        'INSERT INTO hospitals (id, name) VALUES ($1, $2)',
+        [defaultHospitalId, 'MOSC Medical College Mortuary']
+      );
+      console.log(`Migration: created default hospital (${defaultHospitalId}) for existing data`);
+    }
+
+    for (const table of TENANT_TABLES) {
+      const { rowCount } = await pool.query(
+        `UPDATE ${table} SET hospital_id = $1 WHERE hospital_id IS NULL`,
+        [defaultHospitalId]
+      );
+      if (rowCount > 0) console.log(`Migration: backfilled ${rowCount} row(s) in ${table}`);
+    }
+
+    // TEMPORARY, until every controller explicitly passes hospital_id (the
+    // auth/JWT phase of this rework): default new inserts to the same
+    // hospital, so existing code keeps working during the transition instead
+    // of every INSERT statement failing on a NOT NULL column it doesn't know
+    // about yet. Remove this default once that phase lands - at that point a
+    // missing hospital_id should be a loud error, not a silent default.
+    for (const table of TENANT_TABLES) {
+      try {
+        await pool.query(`ALTER TABLE ${table} ALTER COLUMN hospital_id SET DEFAULT '${defaultHospitalId}'`);
+      } catch (err) {
+        console.log(`Could not set hospital_id default on ${table}:`, err.message);
+      }
+    }
+
+    // Once backfilled, every row has a hospital_id - safe to enforce NOT NULL.
+    // Wrapped per-table so one unexpected leftover NULL doesn't block startup;
+    // it'll just log and retry on the next boot instead of crashing the server.
+    for (const table of TENANT_TABLES) {
+      try {
+        await pool.query(`ALTER TABLE ${table} ALTER COLUMN hospital_id SET NOT NULL`);
+      } catch (err) {
+        console.log(`Could not enforce NOT NULL on ${table}.hospital_id yet:`, err.message);
       }
     }
 
@@ -354,6 +433,7 @@ export async function initDatabase() {
       ['idx_billing_services_billingid','billing_services',   '"billingId"'],
       ['idx_billing_createdat',         'billing',            '"createdAt"'],
       ['idx_cabin_allocations_admission','cabin_allocations',  '"admissionDateTime"'],
+      ...TENANT_TABLES.map(table => [`idx_${table}_hospitalid`, table, 'hospital_id']),
     ];
 
     for (const [name, table, column] of indexes) {
