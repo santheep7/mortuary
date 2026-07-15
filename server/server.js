@@ -19,6 +19,7 @@ import serviceRoutes     from './router/serviceRoutes.js';
 import settingsRoutes    from './router/settingsRoutes.js';
 import authRoutes        from './router/authRoutes.js';
 import uploadRoutes      from './router/uploadRoutes.js';
+import hospitalRoutes    from './router/hospitalRoutes.js';
 import { getDashboardStats } from './controller/dashboardController.js';
 import { authenticate, authorize } from './middleware/auth.js';
 
@@ -60,6 +61,7 @@ app.use('/api/billing-settings',   settingsRoutes);
 app.use('/api',                    authRoutes);
 app.use('/api/upload',             uploadRoutes);
 app.use('/api/uploads',            uploadRoutes);
+app.use('/api/superadmin/hospitals', hospitalRoutes);
 
 // Dashboard & health
 app.get('/api/dashboard/stats', authenticate, STAFF, getDashboardStats);

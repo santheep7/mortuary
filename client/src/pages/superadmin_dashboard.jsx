@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import {
   Users, Shield, Settings, LogOut, Activity, Database,
-  Server, AlertCircle, CheckCircle, UserPlus, Trash2, Edit
+  Server, AlertCircle, CheckCircle, UserPlus, Trash2, Edit, Building2, Power
 } from 'lucide-react';
 import { API_BASE } from '../config.js';
 
@@ -20,6 +20,22 @@ function SuperAdminDashboard() {
   const [editMortuaryName, setEditMortuaryName] = useState('');
   const [logoFile, setLogoFile] = useState(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  const [hospitals, setHospitals] = useState([]);
+  const [showAddHospitalModal, setShowAddHospitalModal] = useState(false);
+  const [showEditHospitalModal, setShowEditHospitalModal] = useState(false);
+  const [savingHospital, setSavingHospital] = useState(false);
+  const emptyHospitalForm = {
+    name: '', contact_email: '', contact_phone: '', address: '',
+    pricing_model: 'tiered_flat_hourly', first_day_charge: 2100, hourly_charge_after_24hrs: 130,
+    daily_rate: 500, staff_discount_percent: 100,
+    adminUsername: '', adminPassword: ''
+  };
+  const [newHospital, setNewHospital] = useState(emptyHospitalForm);
+  const [newHospitalLogo, setNewHospitalLogo] = useState(null);
+  const [editHospital, setEditHospital] = useState(null); // { id, ...form fields, is_active }
+  const [editHospitalLogo, setEditHospitalLogo] = useState(null);
+
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -29,20 +45,103 @@ function SuperAdminDashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      const [statsRes, adminsRes, mortuaryRes, logoRes] = await Promise.all([
+      const [statsRes, adminsRes, mortuaryRes, logoRes, hospitalsRes] = await Promise.all([
         axios.get(`${API_BASE}/dashboard/stats`).catch(() => ({ data: null })),
         axios.get(`${API_BASE}/admin/list`).catch(() => ({ data: [] })),
         axios.get(`${API_BASE}/billing-settings/mortuary-name`).catch(() => ({ data: { mortuary_name: 'MOSC Medical College Mortuary' } })),
-        axios.get(`${API_BASE}/billing-settings/mortuary-logo`).catch(() => ({ data: { mortuary_logo: null } }))
+        axios.get(`${API_BASE}/billing-settings/mortuary-logo`).catch(() => ({ data: { mortuary_logo: null } })),
+        axios.get(`${API_BASE}/superadmin/hospitals`).catch(() => ({ data: [] })),
       ]);
       setStats(statsRes.data);
       setAdmins(adminsRes.data);
       setMortuaryName(mortuaryRes.data.mortuary_name || 'MOSC Medical College Mortuary');
       setMortuaryLogo(logoRes.data.mortuary_logo);
+      setHospitals(hospitalsRes.data);
     } catch (error) {
       console.error('Error loading superadmin dashboard:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAddHospital = async (e) => {
+    e.preventDefault();
+    setSavingHospital(true);
+    try {
+      const formData = new FormData();
+      Object.entries(newHospital).forEach(([key, value]) => formData.append(key, value));
+      if (newHospitalLogo) formData.append('logo', newHospitalLogo);
+
+      await axios.post(`${API_BASE}/superadmin/hospitals`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setShowAddHospitalModal(false);
+      setNewHospital(emptyHospitalForm);
+      setNewHospitalLogo(null);
+      fetchDashboardData();
+      alert('Hospital onboarded successfully');
+    } catch (error) {
+      alert('Error onboarding hospital: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setSavingHospital(false);
+    }
+  };
+
+  const openEditHospital = (h) => {
+    setEditHospital({
+      id: h.id,
+      name: h.name || '',
+      contact_email: h.contact_email || '',
+      contact_phone: h.contact_phone || '',
+      address: h.address || '',
+      is_active: h.is_active,
+      pricing_model: h.pricing_model || 'tiered_flat_hourly',
+      first_day_charge: h.first_day_charge || 2100,
+      hourly_charge_after_24hrs: h.hourly_charge_after_24hrs || 130,
+      daily_rate: h.daily_rate || 500,
+      staff_discount_percent: h.staff_discount_percent || 100,
+    });
+    setEditHospitalLogo(null);
+    setShowEditHospitalModal(true);
+  };
+
+  const handleUpdateHospital = async (e) => {
+    e.preventDefault();
+    setSavingHospital(true);
+    try {
+      const formData = new FormData();
+      Object.entries(editHospital).forEach(([key, value]) => {
+        if (key !== 'id') formData.append(key, value);
+      });
+      if (editHospitalLogo) formData.append('logo', editHospitalLogo);
+
+      await axios.put(`${API_BASE}/superadmin/hospitals/${editHospital.id}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setShowEditHospitalModal(false);
+      setEditHospital(null);
+      setEditHospitalLogo(null);
+      fetchDashboardData();
+      alert('Hospital updated successfully');
+    } catch (error) {
+      alert('Error updating hospital: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setSavingHospital(false);
+    }
+  };
+
+  const handleToggleHospitalActive = async (h) => {
+    const action = h.is_active ? 'deactivate' : 'reactivate';
+    if (!confirm(`Are you sure you want to ${action} ${h.name}?`)) return;
+    try {
+      const formData = new FormData();
+      formData.append('is_active', !h.is_active);
+      await axios.put(`${API_BASE}/superadmin/hospitals/${h.id}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      fetchDashboardData();
+    } catch (error) {
+      alert('Error updating hospital: ' + (error.response?.data?.error || error.message));
     }
   };
 
@@ -179,10 +278,10 @@ function SuperAdminDashboard() {
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {[
+            { label: 'Total Hospitals', val: hospitals.length, icon: Building2, color: 'bg-indigo-50 text-indigo-600 border-indigo-200' },
             { label: 'Total Bodies', val: stats?.totalBodies || 0, icon: Users, color: 'bg-blue-50 text-blue-600 border-blue-200' },
             { label: 'Active Allocations', val: stats?.activeAllocations || 0, icon: Activity, color: 'bg-green-50 text-green-600 border-green-200' },
             { label: 'Total Admins', val: admins.length, icon: Shield, color: 'bg-purple-50 text-purple-600 border-purple-200' },
-            { label: 'Pending Bills', val: stats?.pendingBills || 0, icon: Database, color: 'bg-amber-50 text-amber-600 border-amber-200' }
           ].map((stat, i) => (
             <div key={i} className={`bg-white border rounded-xl p-6 shadow-sm ${stat.color}`}>
               <div className="flex items-center justify-between mb-2">
@@ -192,6 +291,79 @@ function SuperAdminDashboard() {
               <div className="text-3xl font-bold text-slate-900">{stat.val}</div>
             </div>
           ))}
+        </div>
+
+        {/* Hospitals Section */}
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mb-8">
+          <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-slate-800">Hospitals</h2>
+              <p className="text-sm text-slate-500">Onboard and manage client hospitals</p>
+            </div>
+            <button
+              onClick={() => setShowAddHospitalModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+            >
+              <Building2 size={16} /> Add Hospital
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                  <th className="px-6 py-3">Name</th>
+                  <th className="px-6 py-3">Pricing Model</th>
+                  <th className="px-6 py-3">Admins</th>
+                  <th className="px-6 py-3">Bodies</th>
+                  <th className="px-6 py-3">Status</th>
+                  <th className="px-6 py-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
+                {hospitals.length > 0 ? (
+                  hospitals.map((h) => (
+                    <tr key={h.id} className="hover:bg-slate-50">
+                      <td className="px-6 py-4 font-medium">{h.name}</td>
+                      <td className="px-6 py-4">
+                        <span className="px-2 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800">
+                          {h.pricing_model === 'flat_daily' ? 'Flat Daily'
+                            : h.pricing_model === 'free' ? 'Free'
+                            : 'Tiered + Hourly'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">{h.adminCount}</td>
+                      <td className="px-6 py-4">{h.bodyCount}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                          h.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                        }`}>
+                          {h.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 flex items-center gap-3">
+                        <button onClick={() => openEditHospital(h)} className="text-purple-600 hover:text-purple-800">
+                          <Edit size={16} />
+                        </button>
+                        <button
+                          onClick={() => handleToggleHospitalActive(h)}
+                          className={h.is_active ? 'text-red-600 hover:text-red-800' : 'text-green-600 hover:text-green-800'}
+                          title={h.is_active ? 'Deactivate' : 'Reactivate'}
+                        >
+                          <Power size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="6" className="px-6 py-10 text-center text-slate-400">
+                      No hospitals onboarded yet
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {/* Admin Management Section */}
@@ -302,6 +474,219 @@ function SuperAdminDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Add Hospital Modal */}
+      {showAddHospitalModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-bold text-slate-800 mb-4">Onboard New Hospital</h3>
+            <form onSubmit={handleAddHospital} className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-slate-700">Hospital Name</label>
+                <input type="text" required value={newHospital.name}
+                  onChange={(e) => setNewHospital({ ...newHospital, name: e.target.value })}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Contact Email</label>
+                  <input type="email" value={newHospital.contact_email}
+                    onChange={(e) => setNewHospital({ ...newHospital, contact_email: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Contact Phone</label>
+                  <input type="text" value={newHospital.contact_phone}
+                    onChange={(e) => setNewHospital({ ...newHospital, contact_phone: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700">Address</label>
+                <input type="text" value={newHospital.address}
+                  onChange={(e) => setNewHospital({ ...newHospital, address: e.target.value })}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700">Logo</label>
+                <input type="file" accept="image/*"
+                  onChange={(e) => setNewHospitalLogo(e.target.files[0])}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
+              </div>
+
+              <hr className="border-slate-200" />
+              <div>
+                <label className="text-sm font-medium text-slate-700">Pricing Model</label>
+                <select value={newHospital.pricing_model}
+                  onChange={(e) => setNewHospital({ ...newHospital, pricing_model: e.target.value })}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1">
+                  <option value="tiered_flat_hourly">Tiered - flat first day + hourly after 24h</option>
+                  <option value="flat_daily">Flat daily rate</option>
+                  <option value="free">Free</option>
+                </select>
+              </div>
+
+              {newHospital.pricing_model === 'tiered_flat_hourly' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">First Day Charge (₹)</label>
+                    <input type="number" min="0" value={newHospital.first_day_charge}
+                      onChange={(e) => setNewHospital({ ...newHospital, first_day_charge: e.target.value })}
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">Hourly Rate After 24h (₹)</label>
+                    <input type="number" min="0" value={newHospital.hourly_charge_after_24hrs}
+                      onChange={(e) => setNewHospital({ ...newHospital, hourly_charge_after_24hrs: e.target.value })}
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
+                  </div>
+                </div>
+              )}
+              {newHospital.pricing_model === 'flat_daily' && (
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Daily Rate (₹)</label>
+                  <input type="number" min="0" value={newHospital.daily_rate}
+                    onChange={(e) => setNewHospital({ ...newHospital, daily_rate: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
+                </div>
+              )}
+              <div>
+                <label className="text-sm font-medium text-slate-700">Staff Welfare Discount (%)</label>
+                <input type="number" min="0" max="100" value={newHospital.staff_discount_percent}
+                  onChange={(e) => setNewHospital({ ...newHospital, staff_discount_percent: e.target.value })}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
+              </div>
+
+              <hr className="border-slate-200" />
+              <p className="text-xs text-slate-500">First Admin account for this hospital - hand these credentials to the hospital.</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Admin Username</label>
+                  <input type="text" required value={newHospital.adminUsername}
+                    onChange={(e) => setNewHospital({ ...newHospital, adminUsername: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Admin Password</label>
+                  <input type="password" required minLength={8} value={newHospital.adminPassword}
+                    onChange={(e) => setNewHospital({ ...newHospital, adminPassword: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
+                </div>
+              </div>
+
+              <div className="flex gap-3 justify-end pt-2">
+                <button type="button" disabled={savingHospital}
+                  onClick={() => { setShowAddHospitalModal(false); setNewHospital(emptyHospitalForm); setNewHospitalLogo(null); }}
+                  className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50">
+                  Cancel
+                </button>
+                <button type="submit" disabled={savingHospital}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400">
+                  {savingHospital ? 'Onboarding...' : 'Onboard Hospital'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Hospital Modal */}
+      {showEditHospitalModal && editHospital && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-bold text-slate-800 mb-4">Edit Hospital</h3>
+            <form onSubmit={handleUpdateHospital} className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-slate-700">Hospital Name</label>
+                <input type="text" required value={editHospital.name}
+                  onChange={(e) => setEditHospital({ ...editHospital, name: e.target.value })}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Contact Email</label>
+                  <input type="email" value={editHospital.contact_email}
+                    onChange={(e) => setEditHospital({ ...editHospital, contact_email: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Contact Phone</label>
+                  <input type="text" value={editHospital.contact_phone}
+                    onChange={(e) => setEditHospital({ ...editHospital, contact_phone: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700">Address</label>
+                <input type="text" value={editHospital.address}
+                  onChange={(e) => setEditHospital({ ...editHospital, address: e.target.value })}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700">Logo (leave blank to keep current)</label>
+                <input type="file" accept="image/*"
+                  onChange={(e) => setEditHospitalLogo(e.target.files[0])}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
+              </div>
+
+              <hr className="border-slate-200" />
+              <div>
+                <label className="text-sm font-medium text-slate-700">Pricing Model</label>
+                <select value={editHospital.pricing_model}
+                  onChange={(e) => setEditHospital({ ...editHospital, pricing_model: e.target.value })}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1">
+                  <option value="tiered_flat_hourly">Tiered - flat first day + hourly after 24h</option>
+                  <option value="flat_daily">Flat daily rate</option>
+                  <option value="free">Free</option>
+                </select>
+              </div>
+
+              {editHospital.pricing_model === 'tiered_flat_hourly' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">First Day Charge (₹)</label>
+                    <input type="number" min="0" value={editHospital.first_day_charge}
+                      onChange={(e) => setEditHospital({ ...editHospital, first_day_charge: e.target.value })}
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">Hourly Rate After 24h (₹)</label>
+                    <input type="number" min="0" value={editHospital.hourly_charge_after_24hrs}
+                      onChange={(e) => setEditHospital({ ...editHospital, hourly_charge_after_24hrs: e.target.value })}
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
+                  </div>
+                </div>
+              )}
+              {editHospital.pricing_model === 'flat_daily' && (
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Daily Rate (₹)</label>
+                  <input type="number" min="0" value={editHospital.daily_rate}
+                    onChange={(e) => setEditHospital({ ...editHospital, daily_rate: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
+                </div>
+              )}
+              <div>
+                <label className="text-sm font-medium text-slate-700">Staff Welfare Discount (%)</label>
+                <input type="number" min="0" max="100" value={editHospital.staff_discount_percent}
+                  onChange={(e) => setEditHospital({ ...editHospital, staff_discount_percent: e.target.value })}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
+              </div>
+
+              <div className="flex gap-3 justify-end pt-2">
+                <button type="button" disabled={savingHospital}
+                  onClick={() => { setShowEditHospitalModal(false); setEditHospital(null); setEditHospitalLogo(null); }}
+                  className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50">
+                  Cancel
+                </button>
+                <button type="submit" disabled={savingHospital}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400">
+                  {savingHospital ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Add Admin Modal */}
       {showAddAdminModal && (
