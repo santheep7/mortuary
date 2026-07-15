@@ -5,6 +5,7 @@ import { API_BASE } from "../config.js";
 import AuthShell from "../components/auth/AuthShell";
 import FormField from "../components/auth/FormField";
 import StatusBanner from "../components/auth/StatusBanner";
+import { useMortuaryName } from "../context/MortuaryNameContext.jsx";
 
 const SHIELD_ICON = "M9 12.75L11.25 15 15 9.75M21 12c0 4.556-3.03 8.25-8.25 9.75C7.53 20.25 4.5 16.556 4.5 12V6.31c0-.51.325-.962.808-1.13a48.99 48.99 0 0111.384 0c.483.168.808.62.808 1.13V12z";
 const USER_ICON = "M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0";
@@ -15,6 +16,7 @@ function AdminLogin() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { fetchMortuarySettings } = useMortuaryName();
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -49,6 +51,11 @@ function AdminLogin() {
 
       localStorage.setItem("role", "Admin");
       localStorage.setItem("admin", JSON.stringify(data.user));
+      // The sidebar/header show whichever hospital's branding was fetched
+      // when the app first loaded (before login) - refresh it now that the
+      // login cookie carries this admin's actual hospital_id, or the
+      // dashboard would keep showing whatever hospital resolved first.
+      await fetchMortuarySettings();
       navigate("/dashboard/admin-dashboard");
     } catch (err) {
       setError("Server error");

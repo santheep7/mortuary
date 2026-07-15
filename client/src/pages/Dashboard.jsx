@@ -11,8 +11,10 @@ import {
 } from 'lucide-react';
 
 import { API_BASE } from '../config.js';
+import { useMortuaryName } from '../context/MortuaryNameContext.jsx';
 
 function Dashboard() {
+  const { mortuaryName } = useMortuaryName();
   const [stats, setStats] = useState(null);
   const [cabins, setCabins] = useState([]);
   const [allocations, setAllocations] = useState([]);
@@ -259,7 +261,7 @@ function Dashboard() {
             Mortuary Operations Dashboard
           </h1>
           <p className="text-sm text-slate-500">
-            MOSC Medical College Command Center • Local Hospital Logistics & Stay Controls
+            {mortuaryName} • Local Hospital Logistics & Stay Controls
           </p>
         </div>
         <button 

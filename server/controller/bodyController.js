@@ -117,7 +117,7 @@ export async function createBody(req, res) {
     if (!hospitalId) return res.status(400).json({ error: 'hospitalId is required' });
 
     const id         = uuidv4();
-    const bodyNumber = await generateBodyNumber();
+    const bodyNumber = await generateBodyNumber(hospitalId);
     const freezerReqValue = bodyType === 'MLC'
       ? (freezerRequired === false || freezerRequired === 0 || freezerRequired === '0' || freezerRequired === 'false' ? 0 : 1)
       : null;

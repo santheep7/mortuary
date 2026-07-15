@@ -19,12 +19,10 @@ export async function getBillingSettings(req, res) {
 
 export async function getMortuaryName(req, res) {
   try {
-    // Public route (no authenticate) - shown on the login screen before
-    // anyone's identity/hospital is known. Uses the caller's hospitalId if
-    // it happens to be available, otherwise falls back to the single
-    // deployment's own hospital, which is exactly today's single-hospital
-    // reality. This will need a real answer (subdomain, invite link, etc.)
-    // once more than one hospital's staff share one login page - Phase 4.
+    // Authenticated - shown in the post-login header/sidebar, scoped to the
+    // caller's own hospital. SuperAdmin has no single hospital (hospitalId
+    // is null), so falls back to whichever row comes first - they don't
+    // have one "home" hospital's branding to show.
     const hospitalId = req.hospitalId ?? req.query.hospitalId;
     const settings = hospitalId
       ? await queryOne('SELECT mortuary_name FROM system_settings WHERE hospital_id = $1', [hospitalId])
@@ -93,15 +91,27 @@ export async function uploadMortuaryLogo(req, res) {
 
 export async function getMortuaryLogo(req, res) {
   try {
-    // Public route - same reasoning as getMortuaryName above.
+    // Authenticated - same reasoning as getMortuaryName above.
     const hospitalId = req.hospitalId ?? req.query.hospitalId;
     const settings = hospitalId
       ? await queryOne('SELECT mortuary_logo FROM system_settings WHERE hospital_id = $1', [hospitalId])
       : await queryOne('SELECT mortuary_logo FROM system_settings LIMIT 1');
-    if (!settings || !settings.mortuary_logo) {
-      return res.json({ mortuary_logo: null });
+
+    if (settings?.mortuary_logo) {
+      return res.json({ mortuary_logo: settings.mortuary_logo });
     }
-    res.json({ mortuary_logo: settings.mortuary_logo });
+
+    // A hospital's logo is normally set once, at SuperAdmin onboarding
+    // (stored on hospitals.logo) - system_settings.mortuary_logo is only
+    // populated if someone later uses this Admin-facing "Upload Logo"
+    // action separately. Fall back to the hospital's own logo so a hospital
+    // isn't shown as logo-less just because nobody re-uploaded it here.
+    if (hospitalId) {
+      const hospital = await queryOne('SELECT logo FROM hospitals WHERE id = $1', [hospitalId]);
+      if (hospital?.logo) return res.json({ mortuary_logo: hospital.logo });
+    }
+
+    res.json({ mortuary_logo: null });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Something went wrong. Please try again later.' });

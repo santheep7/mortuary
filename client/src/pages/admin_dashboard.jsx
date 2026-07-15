@@ -11,8 +11,10 @@ import {
 } from 'lucide-react';
 
 import { API_BASE } from '../config.js';
+import { useMortuaryName } from '../context/MortuaryNameContext.jsx';
 
 function AdminDashboard() {
+  const { mortuaryName } = useMortuaryName();
   const [stats, setStats] = useState(null);
   const [cabins, setCabins] = useState([]);
   const [allocations, setAllocations] = useState([]);
@@ -307,7 +309,7 @@ function AdminDashboard() {
             Admin Dashboard
           </h1>
           <p className="text-sm text-slate-500">
-            MOSC Medical College Command Center • System configuration and live resource tracking
+            {mortuaryName} • System configuration and live resource tracking
           </p>
         </div>
         <button 
@@ -657,7 +659,7 @@ function AdminDashboard() {
             <div className="divide-y divide-slate-100 text-xs">
               <div className="flex justify-between items-center py-2.5">
                 <span className="text-slate-500 font-medium">Facility</span>
-                <span className="font-bold text-slate-800">MOSC Medical College</span>
+                <span className="font-bold text-slate-800">{mortuaryName}</span>
               </div>
               <div className="flex justify-between items-center py-2.5">
                 <span className="text-slate-500 font-medium">Location</span>

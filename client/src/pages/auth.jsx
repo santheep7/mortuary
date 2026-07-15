@@ -5,6 +5,7 @@ import { API_BASE, getUploadUrl } from "../config.js";
 import AuthShell from "../components/auth/AuthShell";
 import FormField from "../components/auth/FormField";
 import StatusBanner from "../components/auth/StatusBanner";
+import { useMortuaryName } from "../context/MortuaryNameContext.jsx";
 import gsap from "gsap";
 
 const LOCK_ICON = "M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z";
@@ -129,6 +130,7 @@ function ApprovalModal({ onGoToLogin }) {
 
 export default function Auth() {
   const navigate = useNavigate();
+  const { fetchMortuarySettings } = useMortuaryName();
   const [isLogin, setIsLogin] = useState(true);
   const [loginForm, setLoginForm] = useState(initialLoginForm);
   const [registerForm, setRegisterForm] = useState(initialRegisterForm);
@@ -277,6 +279,10 @@ export default function Auth() {
       if (res.ok) {
         localStorage.setItem("username", data.user.fullname);
         localStorage.setItem("role", data.user.role);
+        // The sidebar/header show whichever hospital's branding was fetched
+        // when the app first loaded (before login) - refresh it now that the
+        // login cookie carries this staff member's actual hospital_id.
+        await fetchMortuarySettings();
 
         if (data.mustChangePassword) {
           navigate("/change-password");

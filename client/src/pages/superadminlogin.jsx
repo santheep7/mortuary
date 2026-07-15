@@ -5,6 +5,7 @@ import { API_BASE } from "../config.js";
 import AuthShell from "../components/auth/AuthShell";
 import FormField from "../components/auth/FormField";
 import StatusBanner from "../components/auth/StatusBanner";
+import { useMortuaryName } from "../context/MortuaryNameContext.jsx";
 
 const KEY_ICON = "M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z";
 const USER_ICON = "M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0";
@@ -15,6 +16,7 @@ function SuperAdminLogin() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { fetchMortuarySettings } = useMortuaryName();
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -49,6 +51,7 @@ function SuperAdminLogin() {
 
       localStorage.setItem("role", "SuperAdmin");
       localStorage.setItem("admin", JSON.stringify(data.user));
+      await fetchMortuarySettings();
       navigate("/dashboard/superadmin-dashboard");
     } catch (err) {
       setError("Server error");

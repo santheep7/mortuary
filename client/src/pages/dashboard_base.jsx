@@ -104,8 +104,8 @@ export default function Dashboard_Base() {
                 ) : (
                   <span className="text-white font-bold text-xl">M</span>
                 )}
-                <div>
-                  <h1 className="text-white font-bold text-lg">MOSC</h1>
+                <div className="min-w-0">
+                  <h1 className="text-white font-bold text-lg truncate">{mortuaryName}</h1>
                   <p className="text-blue-200 text-xs">Mortuary Management</p>
                 </div>
               </div>

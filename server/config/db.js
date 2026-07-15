@@ -40,13 +40,21 @@ export async function runQuery(sql, params = []) {
 }
 
 // ── Body-number generator ─────────────────────────────────────────────────────
-export async function generateBodyNumber() {
+// Prefixed with the hospital's own Client ID (e.g. "SUNH8261-2026-0001"),
+// not a hardcoded "MOSC-" - every hospital's bodies used to be numbered
+// with MOSC's own prefix and share one global sequence, regardless of which
+// hospital actually registered them. The sequence is also now scoped to
+// that hospital's own bodies via hospital_id, not just a LIKE-prefix match
+// on bodyNumber, so each hospital starts its own count at 0001.
+export async function generateBodyNumber(hospitalId) {
   try {
+    const hospital = await queryOne('SELECT client_id FROM hospitals WHERE id = $1', [hospitalId]);
+    const clientId = hospital?.client_id || 'HOSP';
     const year   = new Date().getFullYear();
-    const prefix = `MOSC-${year}-`;
+    const prefix = `${clientId}-${year}-`;
     const bodies = await queryAll(
-      "SELECT \"bodyNumber\" FROM bodies WHERE \"bodyNumber\" LIKE ?",
-      [`${prefix}%`]
+      'SELECT "bodyNumber" FROM bodies WHERE hospital_id = $1 AND "bodyNumber" LIKE $2',
+      [hospitalId, `${prefix}%`]
     );
     let maxNum = 0;
     for (const body of bodies) {
