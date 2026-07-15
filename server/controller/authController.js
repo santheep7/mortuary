@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcrypt';
-import { pool, queryOne, runQuery, queryAll } from '../config/db.js';
+import { pool, queryOne, runQuery, queryAll, hospitalClause } from '../config/db.js';
 import { signToken } from '../middleware/auth.js';
 
 const ALLOWED_DEPARTMENTS = ['House Keeping', 'M Staff'];
@@ -86,7 +86,7 @@ export async function loginUser(req, res) {
       return res.status(403).json({ message: 'Your registration has been rejected. Please contact the admin for further assistance.' });
     }
 
-    const token = signToken({ id: user.id, role: user.department });
+    const token = signToken({ id: user.id, role: user.department, hospitalId: user.hospital_id });
 
     return res.status(200).json({
       message: 'Login successful',
@@ -113,7 +113,7 @@ export async function loginAdmin(req, res) {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ message: 'Invalid password' });
 
-    const token = signToken({ id: user.id, role: user.role });
+    const token = signToken({ id: user.id, role: user.role, hospitalId: user.hospital_id });
 
     res.json({
       message: 'Login successful',
@@ -143,7 +143,8 @@ export async function loginSuperAdmin(req, res) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    const token = signToken({ id: 'superadmin', role: 'SuperAdmin' });
+    // hospitalId: null - SuperAdmin isn't scoped to one hospital, sees/manages all
+    const token = signToken({ id: 'superadmin', role: 'SuperAdmin', hospitalId: null });
 
     res.json({
       message: 'Login successful',
@@ -184,8 +185,10 @@ export async function registerAdmin(req, res) {
 
 export async function listAdmins(req, res) {
   try {
+    const hc = hospitalClause(req.hospitalId, 1);
     const admins = await queryAll(
-      'SELECT id, username, email, role, status, "createdAt" FROM admin ORDER BY "createdAt" DESC'
+      `SELECT id, username, email, role, status, "createdAt" FROM admin WHERE 1=1${hc.sql} ORDER BY "createdAt" DESC`,
+      hc.params
     );
     res.json(admins);
   } catch (error) {
@@ -201,7 +204,8 @@ export async function deleteAdmin(req, res) {
     const { id } = req.params;
     if (!id) return res.status(400).json({ message: 'Admin ID required' });
 
-    const admin = await queryOne('SELECT * FROM admin WHERE id = $1', [id]);
+    const hc = hospitalClause(req.hospitalId, 2);
+    const admin = await queryOne(`SELECT * FROM admin WHERE id = $1${hc.sql}`, [id, ...hc.params]);
     if (!admin) return res.status(404).json({ message: 'Admin not found' });
 
     if (admin.role === 'SuperAdmin') {
@@ -221,10 +225,12 @@ export async function deleteAdmin(req, res) {
 export async function listUsers(req, res) {
   try {
     // PostgreSQL CASE replaces MySQL FIELD() for ordering
+    const hc = hospitalClause(req.hospitalId, 1);
     const users = await queryAll(
       `SELECT id, full_name, employee_id, department, phone1, phone2, email,
               approval_status, admin_remarks, created_at
        FROM users
+       WHERE 1=1${hc.sql}
        ORDER BY
          CASE approval_status
            WHEN 'pending'  THEN 1
@@ -232,7 +238,8 @@ export async function listUsers(req, res) {
            WHEN 'rejected' THEN 3
            ELSE 4
          END,
-         created_at DESC`
+         created_at DESC`,
+      hc.params
     );
     res.json(users);
   } catch (error) {
@@ -248,11 +255,12 @@ export async function getUserById(req, res) {
     if (!id || !/^\d+$/.test(id))
       return res.status(400).json({ message: 'Invalid user ID.' });
 
+    const hc = hospitalClause(req.hospitalId, 2);
     const user = await queryOne(
       `SELECT id, full_name, employee_id, department, phone1, phone2, email,
               approval_status, admin_remarks, created_at, updated_at
-       FROM users WHERE id = $1`,
-      [id]
+       FROM users WHERE id = $1${hc.sql}`,
+      [id, ...hc.params]
     );
     if (!user) return res.status(404).json({ message: 'User not found.' });
     res.json(user);
@@ -268,7 +276,8 @@ export async function approveUser(req, res) {
     if (!id || !/^\d+$/.test(id))
       return res.status(400).json({ message: 'Invalid user ID.' });
 
-    const user = await queryOne('SELECT id FROM users WHERE id = $1', [id]);
+    const hc = hospitalClause(req.hospitalId, 2);
+    const user = await queryOne(`SELECT id FROM users WHERE id = $1${hc.sql}`, [id, ...hc.params]);
     if (!user) return res.status(404).json({ message: 'User not found.' });
 
     await runQuery(
@@ -289,7 +298,8 @@ export async function rejectUser(req, res) {
       return res.status(400).json({ message: 'Invalid user ID.' });
 
     const remarks = req.body.remarks ? String(req.body.remarks).substring(0, 500) : null;
-    const user = await queryOne('SELECT id FROM users WHERE id = $1', [id]);
+    const hc = hospitalClause(req.hospitalId, 2);
+    const user = await queryOne(`SELECT id FROM users WHERE id = $1${hc.sql}`, [id, ...hc.params]);
     if (!user) return res.status(404).json({ message: 'User not found.' });
 
     await runQuery(

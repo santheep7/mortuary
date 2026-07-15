@@ -1,9 +1,10 @@
 import { v4 as uuidv4 } from 'uuid';
-import { queryAll, queryOne, runQuery } from '../config/db.js';
+import { queryAll, queryOne, runQuery, hospitalClause } from '../config/db.js';
 
 export async function getCabins(req, res) {
   try {
-    const cabins = await queryAll('SELECT * FROM cabins ORDER BY "cabinNumber"');
+    const hc = hospitalClause(req.hospitalId, 1);
+    const cabins = await queryAll(`SELECT * FROM cabins WHERE 1=1${hc.sql} ORDER BY "cabinNumber"`, hc.params);
     res.json(cabins);
   } catch (error) {
     console.error(error);
@@ -14,13 +15,16 @@ export async function getCabins(req, res) {
 export async function createCabin(req, res) {
   try {
     const { cabinNumber, tariff, floor, cabinType, dailyRate } = req.body;
+    const hospitalId = req.hospitalId ?? req.body.hospitalId;
+    if (!hospitalId) return res.status(400).json({ error: 'hospitalId is required' });
+
     const id = uuidv4();
     const resolvedType      = cabinType === 'FREEZER' ? 'FREEZER' : 'NORMAL_CABIN';
     const resolvedDailyRate = parseFloat(dailyRate) || parseFloat(tariff) || 500;
 
     await runQuery(
-      'INSERT INTO cabins (id, "cabinNumber", tariff, daily_rate, floor, cabin_type) VALUES ($1, $2, $3, $4, $5, $6)',
-      [id, cabinNumber, tariff || 500, resolvedDailyRate, floor || 1, resolvedType]
+      'INSERT INTO cabins (id, "cabinNumber", tariff, daily_rate, floor, cabin_type, hospital_id) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [id, cabinNumber, tariff || 500, resolvedDailyRate, floor || 1, resolvedType, hospitalId]
     );
     const cabin = await queryOne('SELECT * FROM cabins WHERE id = $1', [id]);
     res.json(cabin);
@@ -37,11 +41,13 @@ export async function updateCabin(req, res) {
     const resolvedType      = cabinType === 'FREEZER' ? 'FREEZER' : 'NORMAL_CABIN';
     const resolvedDailyRate = parseFloat(dailyRate) || parseFloat(tariff) || 500;
 
+    const hc = hospitalClause(req.hospitalId, 8);
     await runQuery(
-      'UPDATE cabins SET "cabinNumber"=$1, status=$2, tariff=$3, daily_rate=$4, floor=$5, cabin_type=$6, "updatedAt"=NOW() WHERE id=$7',
-      [cabinNumber, status, tariff, resolvedDailyRate, floor, resolvedType, id]
+      `UPDATE cabins SET "cabinNumber"=$1, status=$2, tariff=$3, daily_rate=$4, floor=$5, cabin_type=$6, "updatedAt"=NOW() WHERE id=$7${hc.sql}`,
+      [cabinNumber, status, tariff, resolvedDailyRate, floor, resolvedType, id, ...hc.params]
     );
-    const cabin = await queryOne('SELECT * FROM cabins WHERE id = $1', [id]);
+    const hc2 = hospitalClause(req.hospitalId, 2);
+    const cabin = await queryOne(`SELECT * FROM cabins WHERE id = $1${hc2.sql}`, [id, ...hc2.params]);
     res.json(cabin);
   } catch (error) {
     console.error(error);
@@ -52,7 +58,8 @@ export async function updateCabin(req, res) {
 export async function deleteCabin(req, res) {
   try {
     const { id } = req.params;
-    await runQuery("UPDATE cabins SET status = 'Deactivated' WHERE id = $1", [id]);
+    const hc = hospitalClause(req.hospitalId, 2);
+    await runQuery(`UPDATE cabins SET status = 'Deactivated' WHERE id = $1${hc.sql}`, [id, ...hc.params]);
     res.json({ message: 'Cabin deactivated' });
   } catch (error) {
     console.error(error);

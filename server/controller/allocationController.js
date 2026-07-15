@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { queryAll, queryOne, runQuery } from '../config/db.js';
+import { queryAll, queryOne, runQuery, hospitalClause } from '../config/db.js';
 
 function formatPgDateTime(date) {
   // Preserve local timezone instead of converting to UTC
@@ -19,6 +19,18 @@ export async function createAllocation(req, res) {
     if (!bodyId || !cabinId)
       return res.status(400).json({ error: 'bodyId and cabinId are required' });
 
+    // SuperAdmin has no single hospital scope of their own - a write on their
+    // behalf must say which hospital it's for.
+    const hospitalId = req.hospitalId ?? req.body.hospitalId;
+    if (!hospitalId) return res.status(400).json({ error: 'hospitalId is required' });
+
+    // Both sides of the allocation must actually belong to that hospital -
+    // otherwise a hospital could link its body to another hospital's cabin.
+    const bodyOwned = await queryOne('SELECT id FROM bodies WHERE id = $1 AND hospital_id = $2', [bodyId, hospitalId]);
+    if (!bodyOwned) return res.status(404).json({ error: 'Body not found' });
+    const cabinOwned = await queryOne('SELECT id FROM cabins WHERE id = $1 AND hospital_id = $2', [cabinId, hospitalId]);
+    if (!cabinOwned) return res.status(404).json({ error: 'Cabin not found' });
+
     const settings      = await queryOne('SELECT first_day_charge FROM system_settings LIMIT 1');
     const firstDayCharge = settings ? Number(settings.first_day_charge) : 2100;
 
@@ -28,14 +40,14 @@ export async function createAllocation(req, res) {
     }
 
     const existing = await queryOne(
-      "SELECT * FROM cabin_allocations WHERE \"bodyId\" = $1 AND status = 'Allocated'",
-      [bodyId]
+      "SELECT * FROM cabin_allocations WHERE \"bodyId\" = $1 AND status = 'Allocated' AND hospital_id = $2",
+      [bodyId, hospitalId]
     );
     if (existing) return res.status(400).json({ error: 'Body already has an active cabin allocation' });
 
     const cabinInUse = await queryOne(
-      "SELECT * FROM cabin_allocations WHERE \"cabinId\" = $1 AND status = 'Allocated'",
-      [cabinId]
+      "SELECT * FROM cabin_allocations WHERE \"cabinId\" = $1 AND status = 'Allocated' AND hospital_id = $2",
+      [cabinId, hospitalId]
     );
     if (cabinInUse) return res.status(400).json({ error: 'This cabin is already occupied by another body' });
 
@@ -60,9 +72,9 @@ export async function createAllocation(req, res) {
     await runQuery(`
       INSERT INTO cabin_allocations
         (id, "bodyId", "cabinId", "admissionDateTime", "advanceAmount",
-         "hourlyRate", "minHours", "freeHours", "estimatedReleaseDateTime")
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-    `, [id, bodyId, cabinId, admissionStr, advanceAmount || 0, firstDayCharge, 1, 0, estimatedStr]);
+         "hourlyRate", "minHours", "freeHours", "estimatedReleaseDateTime", hospital_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+    `, [id, bodyId, cabinId, admissionStr, advanceAmount || 0, firstDayCharge, 1, 0, estimatedStr, hospitalId]);
 
     await runQuery("UPDATE cabins SET status = 'Occupied' WHERE id = $1", [cabinId]);
     await runQuery("UPDATE bodies SET status = 'Allocated' WHERE id = $1", [bodyId]);
@@ -94,7 +106,10 @@ export async function getAllocations(req, res) {
       WHERE 1=1
     `;
     const params = [];
-    if (status) { query += ' AND ca.status = $1'; params.push(status); }
+    let idx = 1;
+    if (status) { query += ` AND ca.status = $${idx++}`; params.push(status); }
+    const hc = hospitalClause(req.hospitalId, idx, 'ca.hospital_id');
+    query += hc.sql; params.push(...hc.params);
     query += ' ORDER BY ca."createdAt" DESC';
 
     const allocations = await queryAll(query, params);
@@ -108,7 +123,8 @@ export async function getAllocations(req, res) {
 export async function releaseAllocation(req, res) {
   try {
     const { id } = req.params;
-    const allocation = await queryOne('SELECT * FROM cabin_allocations WHERE id = $1', [id]);
+    const hc = hospitalClause(req.hospitalId, 2);
+    const allocation = await queryOne(`SELECT * FROM cabin_allocations WHERE id = $1${hc.sql}`, [id, ...hc.params]);
     if (!allocation) return res.status(404).json({ error: 'Allocation not found' });
 
     const body = await queryOne('SELECT billing_status FROM bodies WHERE id = $1', [allocation.bodyId]);
@@ -122,8 +138,8 @@ export async function releaseAllocation(req, res) {
     );
     await runQuery("UPDATE cabins SET status = 'NEEDS_CLEANING' WHERE id = $1", [allocation.cabinId]);
     await runQuery(
-      'INSERT INTO housekeeping_tasks (id, "cabinId", status, "createdAt") VALUES ($1,$2,$3,NOW())',
-      [uuidv4(), allocation.cabinId, 'PENDING']
+      'INSERT INTO housekeeping_tasks (id, "cabinId", status, "createdAt", hospital_id) VALUES ($1,$2,$3,NOW(),$4)',
+      [uuidv4(), allocation.cabinId, 'PENDING', allocation.hospital_id]
     );
 
     res.json({ message: 'Marked as released successfully', releaseDateTime: new Date().toISOString() });
@@ -138,7 +154,8 @@ export async function extendAllocation(req, res) {
     const { id } = req.params;
     const { expectedReleaseDateTime } = req.body;
 
-    const allocation = await queryOne('SELECT * FROM cabin_allocations WHERE id = $1', [id]);
+    const hc = hospitalClause(req.hospitalId, 2);
+    const allocation = await queryOne(`SELECT * FROM cabin_allocations WHERE id = $1${hc.sql}`, [id, ...hc.params]);
     if (!allocation) return res.status(404).json({ error: 'Allocation not found' });
 
     // Accept ISO or any parseable date string
@@ -157,7 +174,8 @@ export async function extendAllocation(req, res) {
 export async function calculateAllocation(req, res) {
   try {
     const { id } = req.params;
-    const allocation = await queryOne('SELECT * FROM cabin_allocations WHERE id = $1', [id]);
+    const hc = hospitalClause(req.hospitalId, 2);
+    const allocation = await queryOne(`SELECT * FROM cabin_allocations WHERE id = $1${hc.sql}`, [id, ...hc.params]);
     if (!allocation) return res.status(404).json({ error: 'Allocation not found' });
 
     const settings    = await queryOne('SELECT first_day_charge, hourly_charge_after_24hrs FROM system_settings LIMIT 1');

@@ -59,6 +59,18 @@ export async function generateBodyNumber() {
   }
 }
 
+// ── Tenant scoping helper ─────────────────────────────────────────────────────
+// hospitalId === null means SuperAdmin (no single-hospital scope) - the filter
+// is skipped entirely so SuperAdmin queries see/manage every hospital's data.
+// Usage: build params up to the point of use, then:
+//   const hc = hospitalClause(req.hospitalId, params.length + 1, 'b.hospital_id');
+//   query += hc.sql; params.push(...hc.params);
+export function hospitalClause(hospitalId, idx, column = 'hospital_id') {
+  return hospitalId == null
+    ? { sql: '', params: [] }
+    : { sql: ` AND ${column} = $${idx}`, params: [hospitalId] };
+}
+
 // ── Column-existence helper ───────────────────────────────────────────────────
 async function columnExists(table, column) {
   const { rows } = await pool.query(
