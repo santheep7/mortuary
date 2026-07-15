@@ -5,11 +5,128 @@ import { signToken } from '../middleware/auth.js';
 
 const ALLOWED_DEPARTMENTS = ['House Keeping', 'M Staff'];
 
+// ── Password Reset Request ─────────────────────────────────────────────────────
+
+export async function requestPasswordReset(req, res) {
+  try {
+    const { email } = req.body;
+
+    if (!email || typeof email !== 'string' || !email.trim())
+      return res.status(400).json({ message: 'Email is required.' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))
+      return res.status(400).json({ message: 'Invalid email format.' });
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    const user = await queryOne(
+      'SELECT id, full_name, employee_id FROM users WHERE email = $1',
+      [cleanEmail]
+    );
+
+    if (!user) {
+      return res.status(404).json({ message: 'No account found with this email.' });
+    }
+
+    await runQuery(
+      'UPDATE users SET password_reset_requested = TRUE, updated_at = NOW() WHERE email = $1',
+      [cleanEmail]
+    );
+
+    res.status(200).json({ message: 'Password reset request submitted. Contact admin for assistance.' });
+  } catch (error) {
+    console.error('Password reset request error:', error);
+    res.status(500).json({ message: 'Server error. Please try again later.' });
+  }
+}
+
+// ── Admin: Get Password Reset Requests ─────────────────────────────────────────
+
+export async function getPasswordResetRequests(req, res) {
+  try {
+    const requests = await queryAll(
+      `SELECT id, full_name, employee_id, email, department, phone1, password_reset_requested, must_change_password
+       FROM users
+       WHERE password_reset_requested = TRUE
+       ORDER BY updated_at DESC`
+    );
+    res.json(requests);
+  } catch (error) {
+    console.error('Get password reset requests error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+}
+
+// ── Admin: Reset User Password ────────────────────────────────────────────────
+
+export async function resetUserPassword(req, res) {
+  try {
+    const { userId, newPassword } = req.body;
+
+    if (!userId || !newPassword || newPassword.length < 8) {
+      return res.status(400).json({ message: 'Invalid request. Password must be at least 8 characters.' });
+    }
+
+    const user = await queryOne('SELECT id FROM users WHERE id = $1', [userId]);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    const hash = await bcrypt.hash(newPassword, 12);
+    await runQuery(
+      `UPDATE users 
+       SET password = $1, password_reset_requested = FALSE, must_change_password = TRUE, updated_at = NOW() 
+       WHERE id = $2`,
+      [hash, userId]
+    );
+
+    res.status(200).json({ message: 'Password reset successfully. User must change password on next login.' });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ message: 'Server error. Please try again later.' });
+  }
+}
+
+// ── User: Change Password (when must_change_password is true) ──────────────────
+
+export async function changePassword(req, res) {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.user.id;
+
+    if (!currentPassword || !newPassword || newPassword.length < 8) {
+      return res.status(400).json({ message: 'Invalid request. Password must be at least 8 characters.' });
+    }
+
+    const user = await queryOne('SELECT password FROM users WHERE id = $1', [userId]);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: 'Current password is incorrect.' });
+    }
+
+    const hash = await bcrypt.hash(newPassword, 12);
+    await runQuery(
+      `UPDATE users 
+       SET password = $1, must_change_password = FALSE, updated_at = NOW() 
+       WHERE id = $2`,
+      [hash, userId]
+    );
+
+    res.status(200).json({ message: 'Password changed successfully.' });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ message: 'Server error. Please try again later.' });
+  }
+}
+
 // ── User registration ────────────────────────────────────────────────────────
 
 export async function registerUser(req, res) {
   try {
-    const { fullname, employee_id, department, phone1, phone2, email, password } = req.body;
+    const { fullname, employee_id, department, phone1, phone2, email, password, client_id } = req.body;
 
     if (!fullname || typeof fullname !== 'string' || !fullname.trim())
       return res.status(400).json({ message: 'Full name is required.' });
@@ -29,12 +146,15 @@ export async function registerUser(req, res) {
       return res.status(400).json({ message: 'Invalid email format.' });
     if (!password || password.length < 8)
       return res.status(400).json({ message: 'Password must be at least 8 characters.' });
+    if (!client_id || typeof client_id !== 'string' || !client_id.trim())
+      return res.status(400).json({ message: 'Client ID is required.' });
 
     const cleanEmployeeId = employee_id.trim();
     const cleanEmail      = email.trim().toLowerCase();
     const cleanFullname   = fullname.trim();
     const cleanPhone1     = phone1.trim();
     const cleanPhone2     = phone2 ? phone2.trim() : null;
+    const cleanClientId   = client_id.trim();
 
     const existingByEmpId = await queryOne('SELECT id FROM users WHERE employee_id = $1', [cleanEmployeeId]);
     if (existingByEmpId) return res.status(400).json({ message: 'Employee ID is already registered.' });
@@ -42,11 +162,14 @@ export async function registerUser(req, res) {
     const existingByEmail = await queryOne('SELECT id FROM users WHERE email = $1', [cleanEmail]);
     if (existingByEmail) return res.status(400).json({ message: 'Email address is already registered.' });
 
+    const existingClient = await queryOne('SELECT id FROM clients WHERE client_id = $1', [cleanClientId]);
+    if (!existingClient) return res.status(400).json({ message: 'Invalid Client ID.' });
+
     const hash = await bcrypt.hash(password, 12);
     await runQuery(
-      `INSERT INTO users (full_name, employee_id, department, phone1, phone2, email, password, approval_status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')`,
-      [cleanFullname, cleanEmployeeId, department, cleanPhone1, cleanPhone2, cleanEmail, hash]
+      `INSERT INTO users (full_name, employee_id, department, phone1, phone2, email, password, client_id, approval_status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending')`,
+      [cleanFullname, cleanEmployeeId, department, cleanPhone1, cleanPhone2, cleanEmail, hash, cleanClientId]
     );
 
     res.status(201).json({ message: 'Registration submitted. Awaiting admin approval.' });
@@ -88,7 +211,6 @@ export async function loginUser(req, res) {
 
     const token = signToken({ id: user.id, role: user.department });
 
-    // Set httpOnly cookie
     res.cookie('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -96,8 +218,11 @@ export async function loginUser(req, res) {
       maxAge: 8 * 60 * 60 * 1000 // 8 hours
     });
 
+    const mustChange = !!user.must_change_password;
+
     return res.status(200).json({
       message: 'Login successful',
+      mustChangePassword: mustChange,
       user: { id: user.id, fullname: user.full_name, email: user.email, role: user.department }
     });
   } catch (error) {
@@ -122,12 +247,11 @@ export async function loginAdmin(req, res) {
 
     const token = signToken({ id: user.id, role: user.role });
 
-    // Set httpOnly cookie
     res.cookie('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 8 * 60 * 60 * 1000 // 8 hours
+      maxAge: 8 * 60 * 60 * 1000
     });
 
     res.json({
@@ -159,12 +283,11 @@ export async function loginSuperAdmin(req, res) {
 
     const token = signToken({ id: 'superadmin', role: 'SuperAdmin' });
 
-    // Set httpOnly cookie
     res.cookie('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 8 * 60 * 60 * 1000 // 8 hours
+      maxAge: 8 * 60 * 60 * 1000
     });
 
     res.json({
@@ -181,7 +304,6 @@ export async function loginSuperAdmin(req, res) {
 
 export async function logout(req, res) {
   try {
-    // Clear the httpOnly cookie
     res.clearCookie('token');
     res.json({ message: 'Logout successful' });
   } catch (error) {
@@ -254,10 +376,10 @@ export async function deleteAdmin(req, res) {
 
 export async function listUsers(req, res) {
   try {
-    // PostgreSQL CASE replaces MySQL FIELD() for ordering
     const users = await queryAll(
       `SELECT id, full_name, employee_id, department, phone1, phone2, email,
-              approval_status, admin_remarks, created_at
+              approval_status, admin_remarks, created_at,
+              password_reset_requested
        FROM users
        ORDER BY
          CASE approval_status
@@ -278,13 +400,13 @@ export async function listUsers(req, res) {
 export async function getUserById(req, res) {
   try {
     const { id } = req.params;
-    // users.id is SERIAL (integer) in PG
     if (!id || !/^\d+$/.test(id))
       return res.status(400).json({ message: 'Invalid user ID.' });
 
     const user = await queryOne(
       `SELECT id, full_name, employee_id, department, phone1, phone2, email,
-              approval_status, admin_remarks, created_at, updated_at
+              approval_status, admin_remarks, created_at, updated_at,
+              must_change_password, password_reset_requested
        FROM users WHERE id = $1`,
       [id]
     );
@@ -333,6 +455,34 @@ export async function rejectUser(req, res) {
     res.json({ message: 'User rejected.' });
   } catch (error) {
     console.error('Reject error:', error.message);
+    res.status(500).json({ message: 'Server error.' });
+  }
+}
+
+// ── Password Reset Flow ──────────────────────────────────────────────────────
+
+// Admin manually resets a user's password
+export async function adminResetPassword(req, res) {
+  try {
+    const { id } = req.params;
+    const { password } = req.body;
+
+    if (!id || !/^\d+$/.test(id))
+      return res.status(400).json({ message: 'Invalid user ID.' });
+    if (!password || password.length < 8)
+      return res.status(400).json({ message: 'Password must be at least 8 characters.' });
+
+    const user = await queryOne('SELECT id FROM users WHERE id = $1', [id]);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    const hash = await bcrypt.hash(password, 12);
+    await runQuery(
+      `UPDATE users SET password = $1, must_change_password = TRUE, password_reset_requested = FALSE WHERE id = $2`,
+      [hash, id]
+    );
+    res.json({ message: 'Password has been reset. User must change it on next login.' });
+  } catch (error) {
+    console.error('Admin password reset error:', error);
     res.status(500).json({ message: 'Server error.' });
   }
 }

@@ -138,9 +138,12 @@ export async function initDatabase() {
         phone2          VARCHAR(20),
         email           VARCHAR(150) UNIQUE NOT NULL,
         password        VARCHAR(255) NOT NULL,
+        client_id       VARCHAR(50),
         approval_status VARCHAR(20) NOT NULL DEFAULT 'pending'
                           CHECK (approval_status IN ('pending','approved','rejected')),
         admin_remarks   VARCHAR(500),
+        must_change_password BOOLEAN DEFAULT FALSE,
+        password_reset_requested BOOLEAN DEFAULT FALSE,
         created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -318,9 +321,9 @@ export async function initDatabase() {
       ['cabin_allocations',      'estimatedReleaseDateTime', 'TIMESTAMP'],
       ['billing_services',       'serviceId',                'VARCHAR(36)'],
       ['concession_authorities', 'isActive',                 'INTEGER DEFAULT 1'],
-      ['users',                  'approval_status',          "VARCHAR(20) NOT NULL DEFAULT 'pending'"],
       ['users',                  'admin_remarks',            'VARCHAR(500)'],
-      ['users',                  'updated_at',               'TIMESTAMP DEFAULT CURRENT_TIMESTAMP'],
+      ['users',                  'must_change_password',          "BOOLEAN DEFAULT FALSE"],
+      ['users',                  'password_reset_requested',     "BOOLEAN DEFAULT FALSE"],
       ['system_settings',        'mortuary_name',            "VARCHAR(255) DEFAULT 'MOSC Medical College Mortuary'"],
       ['system_settings',        'mortuary_logo',            'TEXT'],
     ];
@@ -405,9 +408,11 @@ export async function initDatabase() {
       console.log('Seeded default Body Dressing service');
     }
 
+
     console.log('PostgreSQL database initialized successfully');
   } catch (error) {
     console.error('Failed to initialize database:', error);
     throw error;
   }
 }
+

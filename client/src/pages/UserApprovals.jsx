@@ -22,7 +22,7 @@ function fmtDate(d) {
 }
 
 // ── Status Badge ──────────────────────────────────────────────────
-function StatusBadge({ status }) {
+function StatusBadge({ status, resetRequested }) {
   const cfg = {
     pending:  { cls: 'bg-amber-100 text-amber-800 border-amber-200',  icon: <Clock size={11} />,        label: 'Pending'  },
     approved: { cls: 'bg-green-100 text-green-800 border-green-200',  icon: <CheckCircle size={11} />,   label: 'Approved' },
@@ -30,14 +30,21 @@ function StatusBadge({ status }) {
   }[status] || { cls: 'bg-gray-100 text-gray-700 border-gray-200', icon: null, label: status };
 
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${cfg.cls}`}>
-      {cfg.icon} {cfg.label}
-    </span>
+    <div className="flex flex-col gap-1 items-start">
+      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${cfg.cls}`}>
+        {cfg.icon} {cfg.label}
+      </span>
+      {resetRequested && (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border bg-indigo-100 text-indigo-800 border-indigo-200">
+          Reset Requested
+        </span>
+      )}
+    </div>
   );
 }
 
 // ── Detail Modal ──────────────────────────────────────────────────
-function DetailModal({ user, onClose, onApprove, onReject }) {
+function DetailModal({ user, onClose, onApprove, onReject, onResetClick }) {
   const [rejectMode, setRejectMode]   = useState(false);
   const [remarks, setRemarks]         = useState('');
   const [actionLoading, setActionLoading] = useState(false);
@@ -81,7 +88,7 @@ function DetailModal({ user, onClose, onApprove, onReject }) {
           {/* Status row */}
           <div className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3">
             <span className="text-sm font-medium text-gray-600">Current Status</span>
-            <StatusBadge status={user.approval_status} />
+            <StatusBadge status={user.approval_status} resetRequested={user.password_reset_requested} />
           </div>
 
           {/* Info grid */}
@@ -175,6 +182,20 @@ function DetailModal({ user, onClose, onApprove, onReject }) {
               )}
             </div>
           )}
+
+          {/* Action area — approved users password reset */}
+          {user.approval_status === 'approved' && (
+            <div className="border-t pt-4">
+              <button
+                onClick={() => { onResetClick(user); onClose(); }}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl
+                  bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm
+                  transition-all shadow-sm"
+              >
+                <RefreshCw size={16} /> Reset Password
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -189,6 +210,7 @@ export default function UserApprovals() {
   const [filterStatus, setFilterStatus] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
   const [actionMsg, setActionMsg]       = useState(null); // { type:'success'|'error', text }
+  const [resettingUser, setResettingUser] = useState(null);
 
   // Inline reject state for table-level quick reject
   const [inlineReject, setInlineReject] = useState(null); // userId
@@ -235,10 +257,22 @@ export default function UserApprovals() {
     }
   };
 
+  const handleResetPassword = async (id, tempPassword) => {
+    try {
+      await axios.post(`${API_BASE}/admin/users/${id}/reset_password`, { password: tempPassword }, { headers: adminHeaders() });
+      showMsg('success', 'Password reset successfully.');
+      fetchUsers();
+    } catch (err) {
+      showMsg('error', err.response?.data?.message || 'Password reset failed.');
+      throw err;
+    }
+  };
+
   const counts = useMemo(() => ({
     pending:  users.filter(u => u.approval_status === 'pending').length,
     approved: users.filter(u => u.approval_status === 'approved').length,
     rejected: users.filter(u => u.approval_status === 'rejected').length,
+    resets:   users.filter(u => u.password_reset_requested).length,
   }), [users]);
 
   const filtered = useMemo(() => users.filter(u => {
@@ -249,7 +283,14 @@ export default function UserApprovals() {
       u.department?.toLowerCase().includes(q) ||
       u.email?.toLowerCase().includes(q) ||
       u.phone1?.includes(q);
-    const matchS = !filterStatus || u.approval_status === filterStatus;
+    
+    let matchS = true;
+    if (filterStatus === 'reset_requests') {
+      matchS = !!u.password_reset_requested;
+    } else if (filterStatus) {
+      matchS = u.approval_status === filterStatus;
+    }
+    
     return matchQ && matchS;
   }), [users, searchQuery, filterStatus]);
 
@@ -294,11 +335,12 @@ export default function UserApprovals() {
       </div>
 
       {/* KPI Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: 'Pending Approval', val: counts.pending,  color: 'text-amber-600  bg-amber-50  border-amber-100',  icon: <Clock size={18} className="text-amber-500" />,        filter: 'pending'  },
           { label: 'Approved',         val: counts.approved, color: 'text-green-600  bg-green-50  border-green-100',  icon: <CheckCircle size={18} className="text-green-500" />,  filter: 'approved' },
           { label: 'Rejected',         val: counts.rejected, color: 'text-red-600    bg-red-50    border-red-100',    icon: <XCircle size={18} className="text-red-500" />,        filter: 'rejected' },
+          { label: 'Reset Requests',   val: counts.resets,   color: 'text-indigo-600 bg-indigo-50 border-indigo-100', icon: <RefreshCw size={18} className="text-indigo-500" />,     filter: 'reset_requests' },
         ].map(k => (
           <button
             key={k.filter}
@@ -338,6 +380,7 @@ export default function UserApprovals() {
             <option value="pending">Pending</option>
             <option value="approved">Approved</option>
             <option value="rejected">Rejected</option>
+            <option value="reset_requests">Reset Requests</option>
           </select>
         </div>
       </div>
@@ -443,6 +486,19 @@ export default function UserApprovals() {
                               )}
                             </>
                           )}
+
+                          {u.approval_status === 'approved' && (
+                            <button
+                              onClick={() => setResettingUser(u)}
+                              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors
+                                ${u.password_reset_requested 
+                                  ? 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-700 shadow-sm animate-pulse'
+                                  : 'bg-white hover:bg-gray-50 text-indigo-600 border-indigo-200'
+                                }`}
+                            >
+                              <RefreshCw size={12} className={u.password_reset_requested ? 'animate-spin' : ''} /> Reset PW
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -495,8 +551,124 @@ export default function UserApprovals() {
           onClose={() => setSelectedUser(null)}
           onApprove={handleApprove}
           onReject={handleReject}
+          onResetClick={setResettingUser}
         />
       )}
+
+      {/* Password Reset Modal */}
+      {resettingUser && (
+        <PasswordResetModal
+          user={resettingUser}
+          onClose={() => setResettingUser(null)}
+          onResetConfirm={handleResetPassword}
+        />
+      )}
+    </div>
+  );
+}
+
+function PasswordResetModal({ user, onClose, onResetConfirm }) {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [generatedPass, setGeneratedPass] = useState("");
+
+  const handleGenerate = () => {
+    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()";
+    let temp = "";
+    for (let i = 0; i < 12; i++) {
+      temp += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setPassword(temp);
+    setGeneratedPass(temp);
+    setError("");
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!password || password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+    setError("");
+    setLoading(true);
+    try {
+      await onResetConfirm(user.id, password);
+      onClose();
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to reset password.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-fade-in" onClick={e => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold text-gray-800">Reset User Password</h2>
+          <button onClick={onClose} className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
+            <X size={20} />
+          </button>
+        </div>
+
+        <p className="text-sm text-gray-600 mb-4">
+          Reset password for <strong>{user.full_name}</strong> (Emp ID: {user.employee_id}). The user will be required to change it on their next login.
+        </p>
+
+        {error && (
+          <div className="p-3 bg-red-50 text-red-800 border border-red-200 text-xs font-semibold rounded-lg mb-4">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Temporary Password</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={password}
+                onChange={e => { setPassword(e.target.value); setError(""); }}
+                className="flex-1 px-3.5 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 font-mono"
+                placeholder="Type or generate a password"
+                disabled={loading}
+              />
+              <button
+                type="button"
+                onClick={handleGenerate}
+                className="px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-200 transition-colors"
+                disabled={loading}
+              >
+                Generate
+              </button>
+            </div>
+            {generatedPass && (
+              <p className="text-xs text-green-600 font-medium mt-1">
+                Generated password: <span className="font-mono font-bold select-all bg-green-50 px-1 py-0.5 rounded">{generatedPass}</span> (Click/Double-click to copy)
+              </p>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-3 mt-5">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+              disabled={loading}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold shadow-md shadow-indigo-200 transition-colors"
+              disabled={loading}
+            >
+              {loading ? "Resetting..." : "Confirm Reset"}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

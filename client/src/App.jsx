@@ -27,8 +27,8 @@ import CabinMaster from './pages/CabinMaster';
 import Reports from './pages/Reports';
 import HousekeepingDashboard from './pages/HousekeepingDashboard';
 import ServiceMaster from './pages/ServiceMaster';
-import Register from './pages/user_register';
-import Login from './pages/signin';
+import Auth from './pages/auth';
+import ForgotPassword from './pages/forgot_password';
 import Dashboard_Base from './pages/dashboard_base';
 import HouseKeeping from './pages/housekeeping';
 import StaffHouseKeeping from './pages/staff_housekeeping';
@@ -41,6 +41,7 @@ import BillingSettings from './pages/BillingSettings';
 import ReleaseHistory from './pages/ReleaseHistory';
 import UserApprovals from './pages/UserApprovals';
 import UserGuide from './pages/UserGuide';
+import ChangePassword from './pages/ChangePassword';
 
 function App() {
 
@@ -48,8 +49,10 @@ function App() {
     
       
             <Routes>
-              <Route path="/signup" element={<Register/>}/>
-              <Route path="/" element={<Login/>}/>
+              <Route path="/signup" element={<Auth/>}/>
+              <Route path="/" element={<Auth/>}/>
+              <Route path="/forgot-password" element={<ForgotPassword/>}/>
+              <Route path="/change-password" element={<ChangePassword/>}/>
               <Route path="/admin-login" element={<AdminLogin/>}/>
               <Route path="/superadmin-login" element={<SuperAdminLogin/>}/>
               <Route path="/admin-register" element={<AdminRegister/>}/>

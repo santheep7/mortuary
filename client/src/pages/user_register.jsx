@@ -163,7 +163,11 @@ export default function Register() {
     <>
       {showSuccessModal && <ApprovalModal onGoToLogin={() => navigate("/")} />}
 
-      <AuthShell iconPath={USER_ICON} title="Create Staff Account" subtitle="Register for access — subject to admin approval" portalLabel="Staff Portal">
+      <AuthShell portalLabel="Staff Portal">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-indigo-600">Create Staff Account</h1>
+          <p className="text-sm text-indigo-400 mt-1">Register for access — subject to admin approval</p>
+        </div>
         <StatusBanner type="error" message={submitError} />
 
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>

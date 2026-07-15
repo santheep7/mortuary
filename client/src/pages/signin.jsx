@@ -29,6 +29,7 @@ function validate(fields) {
 export default function Login() {
   const navigation = useNavigate();
   const [form, setForm] = useState(initialForm);
+  const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
   const [errors, setErrors] = useState({});
   const [submitStatus, setSubmitStatus] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -58,14 +59,18 @@ export default function Login() {
       });
       const data = await res.json();
       if (res.ok) {
-        setSubmitStatus({ type: "success", message: data.message || "Login successful! Redirecting..." });
         localStorage.setItem("username", data.user.fullname);
         localStorage.setItem("role", data.user.role);
 
-        if (data.user.role === "House Keeping") {
-          navigation("/dashboard/housekeeping");
-        } else if (data.user.role === "M Staff") {
-          navigation("/dashboard/dashboard");
+        if (data.mustChangePassword) {
+          navigation("/change-password");
+        } else {
+          setSubmitStatus({ type: "success", message: data.message || "Login successful! Redirecting..." });
+          if (data.user.role === "House Keeping") {
+            navigation("/dashboard/housekeeping");
+          } else if (data.user.role === "M Staff") {
+            navigation("/dashboard/dashboard");
+          }
         }
       } else {
         setSubmitStatus({ type: "error", message: data.message || "Invalid credentials. Please try again." });
@@ -78,7 +83,12 @@ export default function Login() {
   };
 
   return (
-    <AuthShell iconPath={LOCK_ICON} title="Welcome Back" subtitle="Sign in to your staff account" portalLabel="Staff Portal">
+    <AuthShell>
+      {showForgotPasswordModal && <ForgotPasswordModal onClose={() => setShowForgotPasswordModal(false)} />}
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-indigo-600">Welcome back</h1>
+        <p className="text-sm text-indigo-400 mt-1">Sign in to continue to your account.</p>
+      </div>
       <StatusBanner type={submitStatus?.type} message={submitStatus?.message} />
 
       <form onSubmit={handleSubmit} noValidate className="space-y-5">
@@ -93,7 +103,7 @@ export default function Login() {
             <button
               type="button"
               className="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors"
-              onClick={() => alert("Forgot password flow — implement as needed.")}
+              onClick={() => setShowForgotPasswordModal(true)}
             >
               Forgot password?
             </button>
@@ -123,18 +133,6 @@ export default function Login() {
         </button>
       </form>
 
-      <div className="flex items-center gap-3 my-6">
-        <div className="flex-1 h-px bg-gray-100" />
-        <span className="text-xs text-gray-400 font-medium">New staff member?</span>
-        <div className="flex-1 h-px bg-gray-100" />
-      </div>
-
-      <a href="/signup"
-        className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-lg
-          border border-gray-200 text-sm font-medium text-gray-600
-          bg-white hover:bg-gray-50 hover:border-gray-300 transition-all">
-        Create an account
-      </a>
 
       <div className="flex items-center gap-3 my-6">
         <div className="flex-1 h-px bg-gray-100" />
@@ -157,5 +155,108 @@ export default function Login() {
         </a>
       </div>
     </AuthShell>
+  );
+}
+
+function ForgotPasswordModal({ onClose }) {
+  const [email, setEmail] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState(null);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!email.trim()) {
+      setError("Email address is required.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+    setError("");
+    setLoading(true);
+    setStatus(null);
+
+    try {
+      const res = await fetch(`${API_BASE}/forgot_password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setStatus({ type: "success", message: data.message || "Request recorded. Please contact your admin." });
+        setEmail("");
+      } else {
+        setStatus({ type: "error", message: data.message || "Failed to submit request." });
+      }
+    } catch (err) {
+      setStatus({ type: "error", message: "Network error. Please try again later." });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-fade-in" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold text-gray-800">Forgot Password</h2>
+          <button onClick={onClose} className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <p className="text-sm text-gray-600 mb-4">
+          Enter your registered email address below. We will record a password reset request. You must contact your administrator to receive your new temporary password.
+        </p>
+
+        {status && (
+          <div className={`p-3 rounded-lg text-xs font-semibold mb-4 border ${
+            status.type === "success" ? "bg-green-50 text-green-800 border-green-200" : "bg-red-50 text-red-800 border-red-200"
+          }`}>
+            {status.message}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} noValidate className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => { setEmail(e.target.value); setError(""); }}
+              className={`w-full px-3.5 py-2 rounded-lg border text-sm outline-none transition-all focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 ${
+                error ? "border-red-400 bg-red-50" : "border-gray-200 hover:border-gray-300"
+              }`}
+              placeholder="e.g. name@hospital.com"
+              disabled={loading}
+            />
+            {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
+          </div>
+
+          <div className="flex justify-end gap-3 mt-5">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+              disabled={loading}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold shadow-md shadow-indigo-200 transition-colors flex items-center justify-center"
+              disabled={loading}
+            >
+              {loading ? "Submitting..." : "Request Reset"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
