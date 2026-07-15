@@ -364,6 +364,14 @@ export async function initDatabase() {
       ['users',                  'updated_at',               'TIMESTAMP DEFAULT CURRENT_TIMESTAMP'],
       ['system_settings',        'mortuary_name',            "VARCHAR(255) DEFAULT 'MOSC Medical College Mortuary'"],
       ['system_settings',        'mortuary_logo',            'TEXT'],
+      // Pricing engine (Phase 3): each hospital's system_settings row now
+      // also carries which pricing model it's on and that model's own knobs,
+      // instead of every hospital being forced into the same first-day+hourly
+      // formula. staff_discount_percent replaces the old hardcoded 100%
+      // staff-welfare waiver with a per-hospital configurable rate.
+      ['system_settings',        'pricing_model',            "VARCHAR(30) NOT NULL DEFAULT 'tiered_flat_hourly'"],
+      ['system_settings',        'daily_rate',               'NUMERIC(10,2) DEFAULT 500.00'],
+      ['system_settings',        'staff_discount_percent',   'NUMERIC(5,2) NOT NULL DEFAULT 100'],
       ...TENANT_TABLES.map(table => [table, 'hospital_id', 'VARCHAR(36)']),
     ];
 
@@ -429,6 +437,49 @@ export async function initDatabase() {
       }
     }
 
+    // Only these three pricing models exist so far (Phase 3). Adding a new
+    // model later means adding it here AND teaching computeStayCharge()
+    // about it - the CHECK is a deliberate reminder, not busywork.
+    try {
+      await pool.query(`
+        ALTER TABLE system_settings DROP CONSTRAINT IF EXISTS system_settings_pricing_model_check
+      `);
+      await pool.query(`
+        ALTER TABLE system_settings ADD CONSTRAINT system_settings_pricing_model_check
+        CHECK (pricing_model IN ('tiered_flat_hourly', 'flat_daily', 'free'))
+      `);
+    } catch (err) {
+      console.log('Could not add pricing_model check constraint:', err.message);
+    }
+
+    // One settings row per hospital, not one global row - each hospital's
+    // pricing is independent. Enforced at the DB level so a bug can't ever
+    // create two rows for the same hospital and leave which one "wins"
+    // ambiguous.
+    try {
+      await pool.query(`
+        ALTER TABLE system_settings ADD CONSTRAINT system_settings_hospital_id_unique UNIQUE (hospital_id)
+      `);
+    } catch (err) {
+      console.log('Could not add system_settings hospital_id unique constraint:', err.message);
+    }
+
+    // Every hospital needs its own settings row - backfill any that don't
+    // have one yet (e.g. hospitals created directly in the DB before the
+    // SuperAdmin onboarding UI exists to do this automatically).
+    const { rows: hospitalsWithoutSettings } = await pool.query(`
+      SELECT h.id FROM hospitals h
+      LEFT JOIN system_settings s ON s.hospital_id = h.id
+      WHERE s.id IS NULL
+    `);
+    for (const { id: hospId } of hospitalsWithoutSettings) {
+      await pool.query(
+        'INSERT INTO system_settings (id, hospital_id, first_day_charge, hourly_charge_after_24hrs) VALUES ($1, $2, $3, $4)',
+        [uuidv4(), hospId, 2100.00, 130.00]
+      );
+      console.log(`Migration: seeded default settings for hospital ${hospId}`);
+    }
+
     // ── Indexes on frequently-filtered/joined columns ────────────────────────
     const indexes = [
       ['idx_cabin_allocations_bodyid',  'cabin_allocations',  '"bodyId"'],
@@ -457,15 +508,9 @@ export async function initDatabase() {
     }
 
     // ── Seed defaults ─────────────────────────────────────────────────────────
-    const { rows: settingsRows } = await pool.query('SELECT COUNT(*) AS count FROM system_settings');
-    if (parseInt(settingsRows[0].count) === 0) {
-      await pool.query(
-        'INSERT INTO system_settings (id, first_day_charge, hourly_charge_after_24hrs, updated_by) VALUES ($1, $2, $3, $4)',
-        [uuidv4(), 2100.00, 130.00, 'System']
-      );
-      console.log('Seeded default system settings');
-    }
-
+    // (system_settings is now seeded per-hospital above, alongside the
+    // hospital_id unique constraint - superseded the old single global-row
+    // seed here, which never set hospital_id at all.)
     const { rows: cabinRows } = await pool.query('SELECT COUNT(*) AS count FROM cabins');
     if (parseInt(cabinRows[0].count) === 0) {
       for (let i = 1; i <= 10; i++) {

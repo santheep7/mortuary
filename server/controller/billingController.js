@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { queryAll, queryOne, runQuery, hospitalClause } from '../config/db.js';
+import { getHospitalSettings } from '../config/pricing.js';
 
 // ── Mortuary billing ─────────────────────────────────────────────────────────
 
@@ -147,15 +148,19 @@ export async function generateBilling(req, res) {
     const isStaff = staffConcession === true || staffConcession === 1 || staffConcession === '1';
 
     let resolvedDiscountAmount = Number(discountAmount || 0);
-    let resolvedNetAmount      = 0;
+    let resolvedDiscountReason = discountReason || null;
 
     if (isStaff) {
-      resolvedDiscountAmount = Number(totalAmount || 0);
-      resolvedNetAmount      = 0;
-    } else {
-      const resolvedAdvance = advanceAmount !== undefined ? Number(advanceAmount || 0) : 0;
-      resolvedNetAmount     = Math.max(0, Number(totalAmount || 0) - resolvedAdvance - resolvedDiscountAmount);
+      // Staff welfare discount is a per-hospital percentage, not a hardcoded
+      // 100% waiver - MOSC's default (100) preserves the old behavior exactly.
+      const settings    = await getHospitalSettings(hospitalId);
+      const discountPct = Number(settings.staff_discount_percent ?? 100);
+      resolvedDiscountAmount = Number(totalAmount || 0) * (discountPct / 100);
+      resolvedDiscountReason = `Staff Welfare Scheme - ${discountPct}% Discount`;
     }
+
+    const resolvedAdvance   = advanceAmount !== undefined ? Number(advanceAmount || 0) : 0;
+    const resolvedNetAmount = Math.max(0, Number(totalAmount || 0) - resolvedAdvance - resolvedDiscountAmount);
 
     await runQuery(`
       INSERT INTO billing (
@@ -172,7 +177,7 @@ export async function generateBilling(req, res) {
     `, [
       id, bodyId, cabinAllocationId, totalAmount,
       resolvedDiscountAmount,
-      isStaff ? 'Staff Welfare Scheme - 100% Discount' : (discountReason || null),
+      resolvedDiscountReason,
       isStaff ? null : (concessionAuthorityId || null),
       0, resolvedNetAmount, 'Pending',
       firstDayCharge ?? null, extraHours ?? null, hourlyRate ?? null,
