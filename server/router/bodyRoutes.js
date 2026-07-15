@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import upload from '../config/multer.js';
+import upload, { safeUpload } from '../config/multer.js';
 import {
   getBodyTypes,
   getBodies,
@@ -36,7 +36,7 @@ router.delete('/concession-authorities/:id', ADMIN, deleteConcessionAuthority);
 router.get('/mlc-registration/:bodyId', STAFF, getMlcRegistration);
 
 // NOC upload
-router.post('/upload/noc', STAFF, upload.single('noc'), async (req, res) => {
+router.post('/upload/noc', STAFF, safeUpload(upload.single('noc')), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     await compressImage(req.file.path, DOCUMENT_MAX_DIMENSION);

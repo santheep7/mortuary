@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { queryAll, queryOne, runQuery, generateBodyNumber } from '../config/db.js';
+import { queryAll, queryOne, runQuery, generateBodyNumber, hospitalClause } from '../config/db.js';
 
 export async function getBodyTypes(req, res) {
   try {
@@ -39,6 +39,8 @@ export async function getBodies(req, res) {
       params.push(`%${search}%`, `%${search}%`, `%${search}%`);
       idx += 3;
     }
+    const hc = hospitalClause(req.hospitalId, idx, 'b.hospital_id');
+    query += hc.sql; params.push(...hc.params);
     query += ' ORDER BY b."createdAt" DESC';
 
     const bodies = await queryAll(query, params);
@@ -52,7 +54,8 @@ export async function getBodies(req, res) {
 export async function getBodyById(req, res) {
   try {
     const { id } = req.params;
-    const body = await queryOne('SELECT * FROM bodies WHERE id = $1', [id]);
+    const hc = hospitalClause(req.hospitalId, 2);
+    const body = await queryOne(`SELECT * FROM bodies WHERE id = $1${hc.sql}`, [id, ...hc.params]);
     if (!body) return res.status(404).json({ error: 'Body not found' });
 
     const allocation = await queryOne(`
@@ -74,13 +77,14 @@ export async function getBodyById(req, res) {
 export async function getBodyAllocation(req, res) {
   try {
     const { id } = req.params;
+    const hc = hospitalClause(req.hospitalId, 2, 'ca.hospital_id');
     const allocation = await queryOne(`
       SELECT ca.*, c."cabinNumber"
       FROM cabin_allocations ca
       JOIN cabins c ON ca."cabinId" = c.id
-      WHERE ca."bodyId" = $1
+      WHERE ca."bodyId" = $1${hc.sql}
       ORDER BY ca."createdAt" DESC LIMIT 1
-    `, [id]);
+    `, [id, ...hc.params]);
 
     if (!allocation) return res.status(404).json({ error: 'No allocation found for this body' });
     res.json(allocation);
@@ -107,6 +111,11 @@ export async function createBody(req, res) {
       }
     }
 
+    // SuperAdmin has no single hospital scope of their own (req.hospitalId is
+    // null) - a body write on their behalf must say which hospital it's for.
+    const hospitalId = req.hospitalId ?? req.body.hospitalId;
+    if (!hospitalId) return res.status(400).json({ error: 'hospitalId is required' });
+
     const id         = uuidv4();
     const bodyNumber = await generateBodyNumber();
     const freezerReqValue = bodyType === 'MLC'
@@ -120,10 +129,10 @@ export async function createBody(req, res) {
         "estimatedDaysOfStay", "witness1Name", "witness1Address", "witness1Contact",
         "witness2Name", "witness2Address", "witness2Contact",
         "policeStationName", "stationSiName", "presentPoliceOfficerName",
-        "nocCertificateUrl", "freezerRequired"
+        "nocCertificateUrl", "freezerRequired", hospital_id
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
-        $15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26
+        $15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27
       )
     `, [
       id, bodyNumber, bodyType, hospitalNumber, patientName, gender, age, locality,
@@ -132,7 +141,7 @@ export async function createBody(req, res) {
       witness1Name, witness1Address, witness1Contact,
       witness2Name, witness2Address, witness2Contact,
       policeStationName || null, stationSiName || null, presentPoliceOfficerName || null,
-      nocCertificateUrl || null, freezerReqValue
+      nocCertificateUrl || null, freezerReqValue, hospitalId
     ]);
 
     const body = await queryOne('SELECT * FROM bodies WHERE id = $1', [id]);
@@ -159,7 +168,10 @@ export async function updateBody(req, res) {
     };
 
     for (const [key, value] of Object.entries(fields)) {
-      if (key !== 'id') {
+      // id and hospital_id are never client-settable - hospital_id especially
+      // must not be overwritable here, or a request could move a body to a
+      // different hospital and defeat tenant isolation entirely.
+      if (key !== 'id' && key !== 'hospital_id') {
         setClauses.push(`${pgKey(key)} = $${idx++}`);
         values.push(value);
       }
@@ -168,10 +180,13 @@ export async function updateBody(req, res) {
     if (setClauses.length > 0) {
       setClauses.push(`"updatedAt" = NOW()`);
       values.push(id);
-      await runQuery(`UPDATE bodies SET ${setClauses.join(', ')} WHERE id = $${idx}`, values);
+      const hc = hospitalClause(req.hospitalId, idx + 1);
+      values.push(...hc.params);
+      await runQuery(`UPDATE bodies SET ${setClauses.join(', ')} WHERE id = $${idx}${hc.sql}`, values);
     }
 
-    const body = await queryOne('SELECT * FROM bodies WHERE id = $1', [id]);
+    const hc2 = hospitalClause(req.hospitalId, 2);
+    const body = await queryOne(`SELECT * FROM bodies WHERE id = $1${hc2.sql}`, [id, ...hc2.params]);
     res.json(body);
   } catch (error) {
     console.error(error);
@@ -184,7 +199,8 @@ export async function deleteBody(req, res) {
     const { id } = req.params;
     if (!id) return res.status(400).json({ error: 'Body ID is required' });
 
-    const body = await queryOne('SELECT id FROM bodies WHERE id = $1 LIMIT 1', [id]);
+    const hc = hospitalClause(req.hospitalId, 2);
+    const body = await queryOne(`SELECT id FROM bodies WHERE id = $1${hc.sql} LIMIT 1`, [id, ...hc.params]);
     if (!body) return res.status(404).json({ error: 'Body not found' });
 
     const allocation = await queryOne('SELECT id FROM cabin_allocations WHERE "bodyId" = $1 LIMIT 1', [id]);
@@ -205,7 +221,8 @@ export async function deleteBody(req, res) {
 export async function getMlcRegistration(req, res) {
   try {
     const { bodyId } = req.params;
-    const body = await queryOne('SELECT * FROM bodies WHERE id = $1', [bodyId]);
+    const hc = hospitalClause(req.hospitalId, 2);
+    const body = await queryOne(`SELECT * FROM bodies WHERE id = $1${hc.sql}`, [bodyId, ...hc.params]);
     if (!body) return res.status(404).json({ error: 'Body not found' });
     if (body.bodyType !== 'MLC') {
       return res.status(400).json({ error: 'This body is not an MLC case.' });
@@ -219,7 +236,8 @@ export async function getMlcRegistration(req, res) {
 
 export async function getConcessionAuthorities(req, res) {
   try {
-    const authorities = await queryAll('SELECT * FROM concession_authorities WHERE "isActive" = 1');
+    const hc = hospitalClause(req.hospitalId, 1);
+    const authorities = await queryAll(`SELECT * FROM concession_authorities WHERE "isActive" = 1${hc.sql}`, hc.params);
     res.json(authorities);
   } catch (error) {
     console.error(error);
@@ -230,10 +248,13 @@ export async function getConcessionAuthorities(req, res) {
 export async function createConcessionAuthority(req, res) {
   try {
     const { name, designation, department, maxDiscountPercent } = req.body;
+    const hospitalId = req.hospitalId ?? req.body.hospitalId;
+    if (!hospitalId) return res.status(400).json({ error: 'hospitalId is required' });
+
     const id = uuidv4();
     await runQuery(
-      'INSERT INTO concession_authorities (id, name, designation, department, "maxDiscountPercent") VALUES ($1, $2, $3, $4, $5)',
-      [id, name, designation, department, maxDiscountPercent || 100]
+      'INSERT INTO concession_authorities (id, name, designation, department, "maxDiscountPercent", hospital_id) VALUES ($1, $2, $3, $4, $5, $6)',
+      [id, name, designation, department, maxDiscountPercent || 100, hospitalId]
     );
     const authority = await queryOne('SELECT * FROM concession_authorities WHERE id = $1', [id]);
     res.json(authority);
@@ -246,7 +267,8 @@ export async function createConcessionAuthority(req, res) {
 export async function deleteConcessionAuthority(req, res) {
   try {
     const { id } = req.params;
-    await runQuery('UPDATE concession_authorities SET "isActive" = 0 WHERE id = $1', [id]);
+    const hc = hospitalClause(req.hospitalId, 2);
+    await runQuery(`UPDATE concession_authorities SET "isActive" = 0 WHERE id = $1${hc.sql}`, [id, ...hc.params]);
     res.json({ message: 'Concession authority deleted successfully' });
   } catch (error) {
     console.error(error);

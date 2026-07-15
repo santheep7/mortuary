@@ -7,9 +7,14 @@ export function signToken(payload) {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRY });
 }
 
-// Verifies the Bearer token or cookie and attaches { id, role } to req.user.
+// Verifies the Bearer token or cookie and attaches { id, role, hospitalId } to req.user.
 // Rejects with 401 if missing or invalid — this is the real check that
 // replaces trusting a client-supplied x-admin-role/x-user-role header.
+//
+// req.hospitalId is also set directly (same value as req.user.hospitalId) so
+// controllers can scope queries without reaching into req.user each time.
+// It is null for SuperAdmin, who isn't scoped to a single hospital — query
+// helpers should treat null as "no hospital filter" (sees/manages all).
 export function authenticate(req, res, next) {
   // Try to get token from Authorization header first (for backward compatibility)
   const header = req.headers['authorization'] || '';
@@ -24,6 +29,7 @@ export function authenticate(req, res, next) {
 
   try {
     req.user = jwt.verify(token, JWT_SECRET);
+    req.hospitalId = req.user.hospitalId ?? null;
     next();
   } catch (error) {
     return res.status(401).json({ message: 'Invalid or expired session' });

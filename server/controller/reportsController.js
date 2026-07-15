@@ -1,4 +1,4 @@
-import { queryAll, queryOne } from '../config/db.js';
+import { queryAll, queryOne, hospitalClause } from '../config/db.js';
 
 export async function getCabinOccupancy(req, res) {
   try {
@@ -11,6 +11,8 @@ export async function getCabinOccupancy(req, res) {
     if (endDate)   { where += ` AND ca."admissionDateTime" <= $${idx++}`; params.push(endDate); }
     if (cabinNo)   { where += ` AND c."cabinNumber" = $${idx++}`;         params.push(cabinNo); }
     if (bodyType)  { where += ` AND b."bodyType" = $${idx++}`;            params.push(bodyType); }
+    const hc = hospitalClause(req.hospitalId, idx, 'ca.hospital_id');
+    where += hc.sql; params.push(...hc.params);
 
     // Row-level data and the summary counts run as two parallel queries -
     // the summary is computed by Postgres (COUNT/FILTER), not by looping
@@ -74,6 +76,8 @@ export async function getInvoiceAnalysis(req, res) {
     if (startDate) { where += ` AND b."createdAt" >= $${idx++}`; params.push(startDate); }
     if (endDate)   { where += ` AND b."createdAt" <= $${idx++}`; params.push(endDate); }
     if (status)    { where += ` AND b.status = $${idx++}`;        params.push(status); }
+    const hc = hospitalClause(req.hospitalId, idx, 'b.hospital_id');
+    where += hc.sql; params.push(...hc.params);
 
     const [data, summary] = await Promise.all([
       queryAll(`
@@ -123,6 +127,8 @@ export async function getConcessionReport(req, res) {
 
     if (startDate) { where += ` AND b."createdAt" >= $${idx++}`; params.push(startDate); }
     if (endDate)   { where += ` AND b."createdAt" <= $${idx++}`; params.push(endDate); }
+    const hc = hospitalClause(req.hospitalId, idx, 'b.hospital_id');
+    where += hc.sql; params.push(...hc.params);
 
     const [data, summary] = await Promise.all([
       queryAll(`

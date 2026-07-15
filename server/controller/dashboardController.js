@@ -1,4 +1,4 @@
-import { queryOne, queryAll } from '../config/db.js';
+import { queryOne, queryAll, hospitalClause } from '../config/db.js';
 
 export async function getDashboardStats(req, res) {
   try {
@@ -6,6 +6,20 @@ export async function getDashboardStats(req, res) {
     // instead of one at a time - was 10 sequential round-trips on every
     // dashboard load, now the wait is as long as the slowest one, not the
     // sum of all of them.
+    const hcBodies      = hospitalClause(req.hospitalId, 1);
+    const hcAlloc        = hospitalClause(req.hospitalId, 1);
+    const hcBilling      = hospitalClause(req.hospitalId, 1);
+    const hcSvcBilling   = hospitalClause(req.hospitalId, 1);
+    const hcReleases     = hospitalClause(req.hospitalId, 1);
+    const hcReadyRelease = hospitalClause(req.hospitalId, 1);
+    const hcCabins       = hospitalClause(req.hospitalId, 1);
+    const hcRecent       = hospitalClause(req.hospitalId, 1);
+    const hcMortRev      = hospitalClause(req.hospitalId, 1);
+    const hcSvcRev       = hospitalClause(req.hospitalId, 1);
+    const hcLegacySvc    = hospitalClause(req.hospitalId, 1);
+    const hcMortDisc     = hospitalClause(req.hospitalId, 1);
+    const hcSvcDisc      = hospitalClause(req.hospitalId, 1);
+
     const [
       totalBodies,
       activeAllocations,
@@ -21,32 +35,32 @@ export async function getDashboardStats(req, res) {
       mortuaryDiscounts,
       serviceDiscounts,
     ] = await Promise.all([
-      queryOne('SELECT COUNT(*) AS count FROM bodies'),
-      queryOne("SELECT COUNT(*) AS count FROM cabin_allocations WHERE status='Allocated'"),
-      queryOne("SELECT COUNT(*) AS count FROM billing WHERE status='Pending'"),
-      queryOne("SELECT COUNT(*) AS count FROM service_billing WHERE status='Pending'"),
-      queryOne("SELECT COUNT(*) AS count FROM body_releases WHERE DATE(\"releaseDateTime\") = CURRENT_DATE"),
-      queryOne("SELECT COUNT(*) AS count FROM bodies WHERE status='Ready for Release'"),
+      queryOne(`SELECT COUNT(*) AS count FROM bodies WHERE 1=1${hcBodies.sql}`, hcBodies.params),
+      queryOne(`SELECT COUNT(*) AS count FROM cabin_allocations WHERE status='Allocated'${hcAlloc.sql}`, hcAlloc.params),
+      queryOne(`SELECT COUNT(*) AS count FROM billing WHERE status='Pending'${hcBilling.sql}`, hcBilling.params),
+      queryOne(`SELECT COUNT(*) AS count FROM service_billing WHERE status='Pending'${hcSvcBilling.sql}`, hcSvcBilling.params),
+      queryOne(`SELECT COUNT(*) AS count FROM body_releases WHERE DATE("releaseDateTime") = CURRENT_DATE${hcReleases.sql}`, hcReleases.params),
+      queryOne(`SELECT COUNT(*) AS count FROM bodies WHERE status='Ready for Release'${hcReadyRelease.sql}`, hcReadyRelease.params),
       queryOne(`
         SELECT
-          SUM(CASE WHEN status='Available'         THEN 1 ELSE 0 END) AS available,
-          SUM(CASE WHEN status='Occupied'          THEN 1 ELSE 0 END) AS occupied,
-          SUM(CASE WHEN status='Under Maintenance' THEN 1 ELSE 0 END) AS maintenance
-        FROM cabins WHERE status != 'Deactivated'
-      `),
-      queryAll('SELECT * FROM bodies ORDER BY "createdAt" DESC LIMIT 5'),
-      queryOne("SELECT SUM(\"netAmount\") AS sum FROM billing WHERE status='Settled'"),
-      queryOne("SELECT SUM(\"netAmount\") AS sum FROM service_billing WHERE status='Settled'"),
+          COALESCE(SUM(CASE WHEN status='Available'         THEN 1 ELSE 0 END), 0) AS available,
+          COALESCE(SUM(CASE WHEN status='Occupied'          THEN 1 ELSE 0 END), 0) AS occupied,
+          COALESCE(SUM(CASE WHEN status='Under Maintenance' THEN 1 ELSE 0 END), 0) AS maintenance
+        FROM cabins WHERE status != 'Deactivated'${hcCabins.sql}
+      `, hcCabins.params),
+      queryAll(`SELECT * FROM bodies WHERE 1=1${hcRecent.sql} ORDER BY "createdAt" DESC LIMIT 5`, hcRecent.params),
+      queryOne(`SELECT SUM("netAmount") AS sum FROM billing WHERE status='Settled'${hcMortRev.sql}`, hcMortRev.params),
+      queryOne(`SELECT SUM("netAmount") AS sum FROM service_billing WHERE status='Settled'${hcSvcRev.sql}`, hcSvcRev.params),
       queryOne(`
         SELECT SUM("servicesAmount") AS sum
         FROM billing
         WHERE status='Settled'
           AND id NOT IN (
             SELECT DISTINCT "billingId" FROM service_billing WHERE "billingId" IS NOT NULL
-          )
-      `),
-      queryOne('SELECT SUM("discountAmount") AS sum FROM billing'),
-      queryOne('SELECT SUM("discountAmount") AS sum FROM service_billing'),
+          )${hcLegacySvc.sql}
+      `, hcLegacySvc.params),
+      queryOne(`SELECT SUM("discountAmount") AS sum FROM billing WHERE 1=1${hcMortDisc.sql}`, hcMortDisc.params),
+      queryOne(`SELECT SUM("discountAmount") AS sum FROM service_billing WHERE 1=1${hcSvcDisc.sql}`, hcSvcDisc.params),
     ]);
 
     const pendingBillsCount = (Number(pendingMortuary?.count) || 0) + (Number(pendingService?.count) || 0);
