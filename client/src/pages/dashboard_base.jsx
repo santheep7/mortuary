@@ -37,11 +37,15 @@ export default function Dashboard_Base() {
   const navigotor = useNavigate();
   let navItems = [];
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await axios.post(`${import.meta.env.VITE_API_BASE || '/api'}/logout`, {}, { withCredentials: true });
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
     localStorage.removeItem('role');
     localStorage.removeItem('username');
-    localStorage.removeItem('token');
-    delete axios.defaults.headers.common['Authorization'];
+    localStorage.removeItem('admin');
     navigotor("/");
   };
 

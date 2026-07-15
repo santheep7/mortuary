@@ -1,3 +1,8 @@
+import axios from 'axios';
+
+// Configure axios to send cookies with all requests
+axios.defaults.withCredentials = true;
+
 // Central API config — all pages should import from here
 // Falls back to '/api' if the env var is not set
 export const API_BASE = import.meta.env.VITE_API_BASE || '/api';

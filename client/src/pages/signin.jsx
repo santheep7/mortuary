@@ -35,7 +35,8 @@ export default function Login() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    const processedValue = name === 'employeeId' ? value.toUpperCase() : value;
+    setForm((prev) => ({ ...prev, [name]: processedValue }));
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: "" }));
   };
 
@@ -53,14 +54,13 @@ export default function Login() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
+        credentials: 'include',
       });
       const data = await res.json();
       if (res.ok) {
         setSubmitStatus({ type: "success", message: data.message || "Login successful! Redirecting..." });
         localStorage.setItem("username", data.user.fullname);
         localStorage.setItem("role", data.user.role);
-        localStorage.setItem("token", data.token);
-        axios.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;
 
         if (data.user.role === "House Keeping") {
           navigation("/dashboard/housekeeping");

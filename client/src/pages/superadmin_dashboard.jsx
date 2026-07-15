@@ -5,7 +5,8 @@ import {
   Users, Shield, Settings, LogOut, Activity, Database,
   Server, AlertCircle, CheckCircle, UserPlus, Trash2, Edit
 } from 'lucide-react';
-import { API_BASE } from '../config.js';
+import { API_BASE, getUploadUrl } from '../config.js';
+import { useMortuaryName } from '../context/MortuaryNameContext.jsx';
 
 function SuperAdminDashboard() {
   const [stats, setStats] = useState(null);
@@ -21,6 +22,7 @@ function SuperAdminDashboard() {
   const [logoFile, setLogoFile] = useState(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const navigate = useNavigate();
+  const { updateMortuaryLogo, fetchMortuarySettings } = useMortuaryName();
 
   useEffect(() => {
     console.log('SuperAdminDashboard mounted');
@@ -99,12 +101,14 @@ function SuperAdminDashboard() {
     formData.append('updated_by', 'SuperAdmin');
 
     try {
-      await axios.post(`${API_BASE}/billing-settings/mortuary-logo`, formData, {
+      const response = await axios.post(`${API_BASE}/billing-settings/mortuary-logo`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       setShowUploadLogoModal(false);
       setLogoFile(null);
       fetchDashboardData();
+      updateMortuaryLogo(response.data.mortuary_logo);
+      fetchMortuarySettings();
       alert('Logo uploaded successfully');
     } catch (error) {
       alert('Error uploading logo: ' + (error.response?.data?.error || error.message));
@@ -113,11 +117,14 @@ function SuperAdminDashboard() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await axios.post(`${API_BASE}/superadmin/logout`, {}, { withCredentials: true });
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
     localStorage.removeItem('role');
     localStorage.removeItem('admin');
-    localStorage.removeItem('token');
-    delete axios.defaults.headers.common['Authorization'];
     navigate('/superadmin-login');
   };
 
@@ -405,7 +412,7 @@ function SuperAdminDashboard() {
             <h3 className="text-lg font-bold text-slate-800 mb-4">Upload Mortuary Logo</h3>
             {mortuaryLogo && (
               <div className="mb-4 flex justify-center">
-                <img src={`${API_BASE}${mortuaryLogo}`} alt="Current Logo" className="h-24 w-auto object-contain border rounded" />
+                <img src={getUploadUrl(mortuaryLogo)} alt="Current Logo" className="h-24 w-auto object-contain border rounded" />
               </div>
             )}
             <form onSubmit={handleUploadLogo} className="space-y-4">

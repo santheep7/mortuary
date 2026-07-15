@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import cookieParser from 'cookie-parser';
 
 import { initDatabase } from './config/db.js';
 
@@ -31,19 +32,11 @@ const STAFF = authorize('M Staff', 'House Keeping', 'Admin', 'SuperAdmin');
 
 // ── Middleware ───────────────────────────────────────────────────────────────
 app.use(cors());
+app.use(cookieParser());
 app.use(express.json());
-// Uploaded documents (NOC/legal/MLC files, mortuary logo). NOT gated behind
-// authenticate: the frontend loads these via plain <img src> and <a href>,
-// which are native browser requests that cannot carry a custom Authorization
-// header - gating this route broke every image/document display in the app
-// (discovered when the SuperAdmin logo upload succeeded but never rendered).
-// Protection instead relies on filenames being random/unguessable
-// (timestamp-random.ext, not sequential) combined with the file *listing*
-// endpoint (GET /api/upload) staying locked to Admin/SuperAdmin, so there's
-// no way to discover a filename to exploit in the first place. Revisit this
-// properly (e.g. HttpOnly cookie auth, which does ride along with native
-// requests) if that trade-off ever stops being acceptable.
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Serve uploaded files (logos, images) with authentication
+// Cookies are automatically sent with browser requests, so this works now
+app.use('/uploads', authenticate, express.static(path.join(__dirname, 'uploads')));
 
 // ── API Routes ───────────────────────────────────────────────────────────────
 app.use('/api/cabins',             cabinRoutes);
