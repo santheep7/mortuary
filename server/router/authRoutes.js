@@ -11,8 +11,14 @@ import {
   getUserById,
   approveUser,
   rejectUser,
+  requestPasswordReset,
+  getPasswordResetRequests,
+  resetUserPassword,
+  adminResetPassword,
+  changePassword,
   logout
 } from '../controller/authController.js';
+
 import { authenticate, authorize } from '../middleware/auth.js';
 
 const router = Router();
@@ -21,6 +27,8 @@ const router = Router();
 router.post('/user_register', registerUser);
 router.post('/login',         loginUser);
 router.post('/logout',        logout);
+router.post('/forgot_password', requestPasswordReset);
+router.post('/change_password', authenticate, changePassword);
 
 // Admin auth
 router.post('/admin/login',    loginAdmin);
@@ -39,6 +47,16 @@ router.delete('/admin/:id',  authenticate, authorize('SuperAdmin'), deleteAdmin)
 router.get('/admin/users',              authenticate, authorize('Admin', 'SuperAdmin'), listUsers);
 router.get('/admin/users/:id',          authenticate, authorize('Admin', 'SuperAdmin'), getUserById);
 router.post('/admin/users/:id/approve', authenticate, authorize('Admin', 'SuperAdmin'), approveUser);
-router.post('/admin/users/:id/reject',  authenticate, authorize('Admin', 'SuperAdmin'), rejectUser);
+router.post('/admin/users/:id/reject',    authenticate, authorize('Admin', 'SuperAdmin'), rejectUser);
+
+// Password reset management
+router.get('/admin/password-requests', authenticate, authorize('Admin', 'SuperAdmin'), getPasswordResetRequests);
+
+// Match frontend call: POST /admin/users/:id/reset_password
+router.post('/admin/users/:id/reset_password', authenticate, authorize('Admin', 'SuperAdmin'), adminResetPassword);
+
+// Existing endpoint (alternate flow)
+router.post('/admin/reset-password', authenticate, authorize('Admin', 'SuperAdmin'), resetUserPassword);
 
 export default router;
+

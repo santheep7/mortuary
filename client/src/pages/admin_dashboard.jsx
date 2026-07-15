@@ -19,9 +19,36 @@ function AdminDashboard() {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pendingUsersCount, setPendingUsersCount] = useState(0);
+  const [passwordResetRequests, setPasswordResetRequests] = useState([]);
+  const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
+  const [selectedUserForReset, setSelectedUserForReset] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
 
   // Sorting state for occupied cabins table
   const [sortConfig, setSortConfig] = useState({ key: 'cabinNumber', direction: 'asc' });
+
+  const handlePasswordReset = async () => {
+    if (!selectedUserForReset || !newPassword || newPassword.length < 8) {
+      alert('Password must be at least 8 characters');
+      return;
+    }
+
+    try {
+      await axios.post(`${API_BASE}/admin/reset-password`, {
+        userId: selectedUserForReset.id,
+        newPassword: newPassword
+      });
+      alert('Password reset successfully. User must change password on next login.');
+      setShowPasswordResetModal(false);
+      setSelectedUserForReset(null);
+      setNewPassword('');
+      // Refresh password reset requests
+      const resetRes = await axios.get(`${API_BASE}/admin/password-requests`);
+      setPasswordResetRequests(resetRes.data || []);
+    } catch (error) {
+      alert('Failed to reset password: ' + (error.response?.data?.message || 'Unknown error'));
+    }
+  };
 
   useEffect(() => {
     fetchDashboardData();
@@ -48,7 +75,17 @@ function AdminDashboard() {
         });
         const pending = (usersRes.data || []).filter(u => u.approval_status === 'pending').length;
         setPendingUsersCount(pending);
-      } catch { /* non-critical */ }
+      } catch (err) {
+        console.error('Failed to fetch users:', err);
+      }
+
+      // Fetch password reset requests
+      try {
+        const resetRes = await axios.get(`${API_BASE}/admin/password-requests`);
+        setPasswordResetRequests(resetRes.data || []);
+      } catch (err) {
+        console.error('Failed to fetch password reset requests:', err);
+      }
 
     } catch (error) {
       console.error('Error loading admin dashboard data:', error);
@@ -577,6 +614,40 @@ function AdminDashboard() {
             </div>
           </div>
 
+          {/* Password Reset Requests Panel */}
+          <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm p-6 space-y-4">
+            <div>
+              <h2 className="text-base font-bold text-slate-800">Password Reset Requests</h2>
+              <p className="text-xs text-slate-500 font-medium">Staff members requesting password assistance</p>
+            </div>
+            {passwordResetRequests.length > 0 ? (
+              <div className="space-y-3">
+                {passwordResetRequests.map((user) => (
+                  <div key={user.id} className="border border-slate-100 rounded-lg p-3 flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="font-semibold text-slate-800 text-sm">{user.full_name}</div>
+                      <div className="text-xs text-slate-500">{user.employee_id} • {user.department}</div>
+                      <div className="text-xs text-slate-400">{user.email}</div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSelectedUserForReset(user);
+                        setShowPasswordResetModal(true);
+                      }}
+                      className="ml-3 px-3 py-1.5 bg-blue-50 text-blue-600 text-xs font-semibold rounded-lg hover:bg-blue-100 transition-colors"
+                    >
+                      Reset Password
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-4 text-xs text-slate-400">
+                No pending password reset requests
+              </div>
+            )}
+          </div>
+
           {/* System Information Panel */}
           <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm p-6 space-y-4">
             <div>
@@ -751,6 +822,57 @@ function AdminDashboard() {
           </table>
         </div>
       </div>
+
+      {/* Password Reset Modal */}
+      {showPasswordResetModal && selectedUserForReset && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" onClick={() => setShowPasswordResetModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-800">Reset Password</h2>
+              <button onClick={() => setShowPasswordResetModal(false)} className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="mb-4">
+              <p className="text-sm text-gray-600">
+                Reset password for <strong>{selectedUserForReset.full_name}</strong> ({selectedUserForReset.employee_id})
+              </p>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter new password (min 8 characters)"
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={handlePasswordReset}
+                  className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                >
+                  Reset Password
+                </button>
+                <button
+                  onClick={() => {
+                    setShowPasswordResetModal(false);
+                    setSelectedUserForReset(null);
+                    setNewPassword('');
+                  }}
+                  className="flex-1 bg-gray-100 text-gray-700 py-2 px-4 rounded-lg font-semibold hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
