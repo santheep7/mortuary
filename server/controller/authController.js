@@ -165,7 +165,10 @@ export async function registerUser(req, res) {
     const hospital = await queryOne('SELECT id FROM hospitals WHERE client_id = $1 AND is_active = true', [cleanClientId]);
     if (!hospital) return res.status(400).json({ message: 'Invalid Client ID.' });
 
-    const existingByEmpId = await queryOne('SELECT id FROM users WHERE employee_id = $1', [cleanEmployeeId]);
+    // Case-insensitive, matching loginUser's lookup - otherwise "EMP1" could
+    // be registered as a second, distinct account even though "emp1" already
+    // exists, and login-by-employee_id would then be ambiguous between them.
+    const existingByEmpId = await queryOne('SELECT id FROM users WHERE employee_id ILIKE $1', [cleanEmployeeId]);
     if (existingByEmpId) return res.status(400).json({ message: 'Employee ID is already registered.' });
 
     const existingByEmail = await queryOne('SELECT id FROM users WHERE email = $1', [cleanEmail]);
@@ -201,7 +204,11 @@ export async function loginUser(req, res) {
     if (!/^[A-Za-z0-9]+$/.test(employeeId))
       return res.status(401).json({ message: 'Invalid credentials.' });
 
-    const user = await queryOne('SELECT * FROM users WHERE employee_id = $1', [employeeId]);
+    // Case-insensitive: the login form uppercases what you type, but existing
+    // accounts (and anything registered without that transform) may have a
+    // lowercase/mixed-case employee_id stored - a case-sensitive match here
+    // would reject the exact right employee_id/password over letter casing.
+    const user = await queryOne('SELECT * FROM users WHERE employee_id ILIKE $1', [employeeId]);
     if (!user) return res.status(401).json({ message: 'Invalid credentials.' });
 
     const isMatch = await bcrypt.compare(password, user.password);
