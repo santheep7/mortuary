@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { API_BASE } from "../config.js";
@@ -16,7 +16,36 @@ function AdminLogin() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { fetchMortuarySettings } = useMortuaryName();
+  const { fetchMortuarySettings, updateMortuaryLogo, updateMortuaryName } = useMortuaryName();
+
+  // Preview the admin's hospital branding as they type their username,
+  // same idea as the staff login page's Employee ID lookup. Debounced so
+  // it doesn't fire on every keystroke, and the ref guards against a
+  // slow earlier response overwriting a faster later one.
+  const latestUsernameLookup = useRef("");
+  useEffect(() => {
+    const username = form.username.trim();
+    if (username.length < 3) {
+      updateMortuaryLogo(null);
+      updateMortuaryName(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      latestUsernameLookup.current = username;
+      try {
+        const res = await axios.get(`${API_BASE}/hospitals/by-admin-username/${encodeURIComponent(username)}`);
+        if (latestUsernameLookup.current !== username) return; // stale response
+        updateMortuaryLogo(res.data?.mortuary_logo || null);
+        updateMortuaryName(res.data?.mortuary_name || null);
+      } catch {
+        if (latestUsernameLookup.current !== username) return;
+        updateMortuaryLogo(null);
+        updateMortuaryName(null);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.username]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -65,7 +94,7 @@ function AdminLogin() {
   };
 
   return (
-    <AuthShell iconPath={SHIELD_ICON} title="Admin Login" subtitle="Sign in to manage cabins, billing & staff" portalLabel="Admin Portal">
+    <AuthShell iconPath={SHIELD_ICON} title="Admin Login" subtitle="Sign in to manage cabins, billing & staff" portalLabel="Admin Portal" hideToggle>
       <StatusBanner type="error" message={error} />
 
       <form onSubmit={handleSubmit} noValidate className="space-y-5">

@@ -22,7 +22,7 @@ import authRoutes        from './router/authRoutes.js';
 import uploadRoutes      from './router/uploadRoutes.js';
 import hospitalRoutes    from './router/hospitalRoutes.js';
 import { getDashboardStats } from './controller/dashboardController.js';
-import { getHospitalByClientId, getHospitalByEmployeeId } from './controller/hospitalController.js';
+import { getHospitalByClientId, getHospitalByEmployeeId, getHospitalByAdminUsername } from './controller/hospitalController.js';
 import { authenticate, authorize } from './middleware/auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -80,6 +80,7 @@ app.use('/api/superadmin/hospitals', hospitalRoutes);
 // SuperAdmin-only for everything else.
 app.get('/api/hospitals/by-client-id/:clientId', getHospitalByClientId);
 app.get('/api/hospitals/by-employee-id/:employeeId', getHospitalByEmployeeId);
+app.get('/api/hospitals/by-admin-username/:username', getHospitalByAdminUsername);
 
 // Dashboard & health
 app.get('/api/dashboard/stats', authenticate, STAFF, getDashboardStats);

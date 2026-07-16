@@ -61,7 +61,7 @@ function SuperAdminLogin() {
   };
 
   return (
-    <AuthShell iconPath={KEY_ICON} title="SuperAdmin Login" subtitle="System-level access for maintaining this app" portalLabel="SuperAdmin Portal">
+    <AuthShell iconPath={KEY_ICON} title="SuperAdmin Login" subtitle="System-level access for maintaining this app" portalLabel="SuperAdmin Portal" noBranding hideToggle>
       <StatusBanner type="error" message={error} />
 
       <form onSubmit={handleSubmit} noValidate className="space-y-5">

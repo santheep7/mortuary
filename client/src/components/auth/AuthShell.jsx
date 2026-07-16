@@ -2,7 +2,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { getUploadUrl } from "../../config.js";
 import { useMortuaryName } from "../../context/MortuaryNameContext.jsx";
 
-export default function AuthShell({ children, hospitalName, hospitalLogo, portalLabel, onToggle, isLogin }) {
+export default function AuthShell({ children, hospitalName, hospitalLogo, portalLabel, onToggle, isLogin, noBranding, hideToggle }) {
   const location = useLocation();
   const navigate = useNavigate();
   const routeIsSignIn = location.pathname === "/" || location.pathname === "/signin";
@@ -21,16 +21,19 @@ export default function AuthShell({ children, hospitalName, hospitalLogo, portal
   // hospitalLogo props - it updates the shared context instead, so the
   // preview logo can update live while typing without re-rendering this
   // whole shell via props. Login.jsx (the standalone login page) still
-  // passes props directly. Props win when given; context is the fallback.
+  // passes props directly. Props win when given; context is the fallback -
+  // except when noBranding is set (e.g. SuperAdmin login, which has no
+  // hospital of its own and shouldn't show whatever was last looked up
+  // elsewhere via the shared context).
   const { mortuaryName, mortuaryLogo } = useMortuaryName();
 
-  const displayName = hospitalName || mortuaryName || null;
+  const displayName = noBranding ? null : (hospitalName || mortuaryName || null);
 
   // hospitalLogo coming from backend may be either:
   // - an uploads path like "/uploads/logo.png"
   // - or a full URL like "http://localhost:3001/uploads/logo.png"
   // No local default anymore - if there's no real hospital logo yet, nothing renders.
-  const displayLogo = (() => {
+  const displayLogo = noBranding ? null : (() => {
     const src = hospitalLogo || mortuaryLogo;
     if (!src || typeof src !== "string") return null;
     const trimmed = src.trim();
@@ -105,31 +108,33 @@ export default function AuthShell({ children, hospitalName, hospitalLogo, portal
         {/* ── Right panel ── */}
         <div className="flex-1 flex flex-col justify-center px-8 py-10 md:px-12 overflow-y-auto">
 
-          {/* Sign in / Sign up toggle */}
-          <div className="flex justify-center mb-8">
-            <div className="bg-gray-100 rounded-full p-1 flex gap-1">
-              <button
-                onClick={goSignIn}
-                className={`px-6 py-2 rounded-full text-sm font-semibold transition-all ${
-                  isSignIn
-                    ? "bg-white text-gray-900 shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                Sign in
-              </button>
-              <button
-                onClick={goSignUp}
-                className={`px-6 py-2 rounded-full text-sm font-semibold transition-all ${
-                  !isSignIn
-                    ? "bg-white text-gray-900 shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                Sign up
-              </button>
+          {/* Sign in / Sign up toggle - not every page has both modes (e.g. SuperAdmin login) */}
+          {!hideToggle && (
+            <div className="flex justify-center mb-8">
+              <div className="bg-gray-100 rounded-full p-1 flex gap-1">
+                <button
+                  onClick={goSignIn}
+                  className={`px-6 py-2 rounded-full text-sm font-semibold transition-all ${
+                    isSignIn
+                      ? "bg-white text-gray-900 shadow-sm"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  Sign in
+                </button>
+                <button
+                  onClick={goSignUp}
+                  className={`px-6 py-2 rounded-full text-sm font-semibold transition-all ${
+                    !isSignIn
+                      ? "bg-white text-gray-900 shadow-sm"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  Sign up
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Page content */}
           {children}
