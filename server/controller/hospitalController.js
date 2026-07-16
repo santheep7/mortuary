@@ -182,6 +182,28 @@ export async function getHospitalByEmployeeId(req, res) {
   }
 }
 
+// ── Public: look up a hospital's branding by an Admin's username ────────────
+// Same reasoning as the Employee ID lookup above, but keyed off the admin
+// table (which has its own username + hospital_id) since Admin login uses
+// a username, not an employee_id from the users table.
+export async function getHospitalByAdminUsername(req, res) {
+  try {
+    const { username } = req.params;
+    if (!username) return res.status(400).json({ error: 'Username is required' });
+
+    const admin = await queryOne('SELECT hospital_id FROM admin WHERE username = $1', [username.trim()]);
+    if (!admin || !admin.hospital_id) return res.status(404).json({ error: 'No account found for this username' });
+
+    const hospital = await queryOne('SELECT name, logo FROM hospitals WHERE id = $1', [admin.hospital_id]);
+    if (!hospital) return res.status(404).json({ error: 'No hospital found for this account' });
+
+    res.json({ mortuary_name: hospital.name, mortuary_logo: hospital.logo });
+  } catch (error) {
+    console.error('Get hospital by admin username error:', error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
+  }
+}
+
 // ── Hospital detail (edit form) ───────────────────────────────────────────────
 export async function getHospital(req, res) {
   try {
