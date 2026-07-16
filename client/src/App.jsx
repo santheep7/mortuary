@@ -34,7 +34,6 @@ import HouseKeeping from './pages/housekeeping';
 import StaffHouseKeeping from './pages/staff_housekeeping';
 import AdminLogin from './pages/adminlogin';
 import SuperAdminLogin from './pages/superadminlogin';
-import AdminRegister from './pages/admin_register';
 import AdminDashboard from './pages/admin_dashboard';
 import SuperAdminDashboard from './pages/superadmin_dashboard';
 import BillingSettings from './pages/BillingSettings';
@@ -55,7 +54,6 @@ function App() {
               <Route path="/change-password" element={<ChangePassword/>}/>
               <Route path="/admin-login" element={<AdminLogin/>}/>
               <Route path="/superadmin-login" element={<SuperAdminLogin/>}/>
-              <Route path="/admin-register" element={<AdminRegister/>}/>
               <Route path="/user-guide" element={<UserGuide/>}/>
               <Route path="/dashboard" element={<Dashboard_Base/>}>
                <Route path="admin-dashboard" element={<AdminDashboard/>}/>

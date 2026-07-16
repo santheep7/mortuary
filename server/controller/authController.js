@@ -326,24 +326,36 @@ export async function logout(req, res) {
   }
 }
 
-// ── Admin register ───────────────────────────────────────────────────────────
-
-export async function registerAdmin(req, res) {
+// ── Add co-admin (an existing Admin adding another admin to their own
+// hospital) ───────────────────────────────────────────────────────────────
+// Replaces the old public, unauthenticated /admin/register - that endpoint
+// took no hospital_id at all, so every admin it created silently fell back
+// to the `admin` table's temporary DEFAULT hospital_id (whichever hospital
+// was created first), attaching new admins to the wrong hospital. It was
+// also reachable with no login at all via a public /admin-register page,
+// letting anyone create a real Admin account. A hospital's first Admin is
+// still created correctly during SuperAdmin's hospital onboarding
+// (hospitalController.js createHospital, which does pass hospital_id) -
+// this endpoint is only for that hospital's own Admin adding a second one,
+// scoped from their own authenticated session, not a client-supplied value.
+export async function addCoAdmin(req, res) {
   try {
     const { username, email, password } = req.body;
     if (!username || !password)
       return res.status(400).json({ message: 'Username and password are required' });
+    if (password.length < 8)
+      return res.status(400).json({ message: 'Password must be at least 8 characters.' });
 
     const existing = await queryOne('SELECT id FROM admin WHERE username = $1', [username]);
     if (existing) return res.status(400).json({ message: 'Username already exists' });
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 12);
     await runQuery(
-      'INSERT INTO admin (id, username, email, password) VALUES ($1, $2, $3, $4)',
-      [uuidv4(), username, email || null, hashedPassword]
+      'INSERT INTO admin (id, username, email, password, hospital_id) VALUES ($1, $2, $3, $4, $5)',
+      [uuidv4(), username, email || null, hashedPassword, req.hospitalId]
     );
 
-    res.json({ message: 'Admin registered successfully' });
+    res.json({ message: 'Co-admin added successfully' });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });

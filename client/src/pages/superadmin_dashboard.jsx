@@ -16,10 +16,8 @@ function SuperAdminDashboard() {
   const [mortuaryName, setMortuaryName] = useState('');
   const [mortuaryLogo, setMortuaryLogo] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [showAddAdminModal, setShowAddAdminModal] = useState(false);
   const [showEditMortuaryModal, setShowEditMortuaryModal] = useState(false);
   const [showUploadLogoModal, setShowUploadLogoModal] = useState(false);
-  const [newAdmin, setNewAdmin] = useState({ username: '', email: '', password: '' });
   const [editMortuaryName, setEditMortuaryName] = useState('');
   const [logoFile, setLogoFile] = useState(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -45,7 +43,6 @@ function SuperAdminDashboard() {
   useEffect(() => {
     if (!tab) return;
     if (tab === 'hospital') setShowAddHospitalModal(true);
-    if (tab === 'admin') setShowAddAdminModal(true);
   }, [tab]);
 
 
@@ -154,19 +151,6 @@ function SuperAdminDashboard() {
       fetchDashboardData();
     } catch (error) {
       alert('Error updating hospital: ' + (error.response?.data?.error || error.message));
-    }
-  };
-
-  const handleAddAdmin = async (e) => {
-    e.preventDefault();
-    try {
-      await axios.post(`${API_BASE}/admin/register`, newAdmin);
-      setShowAddAdminModal(false);
-      setNewAdmin({ username: '', email: '', password: '' });
-      fetchDashboardData();
-      alert('Admin added successfully');
-    } catch (error) {
-      alert('Error adding admin: ' + (error.response?.data?.message || error.message));
     }
   };
 
@@ -372,14 +356,11 @@ function SuperAdminDashboard() {
           <div className="p-6 border-b border-slate-100 flex items-center justify-between">
             <div>
               <h2 className="text-lg font-bold text-slate-800">Admin Management</h2>
-              <p className="text-sm text-slate-500">Manage system administrators</p>
+              <p className="text-sm text-slate-500">
+                A hospital's first Admin is created when the hospital is onboarded above.
+                Additional admins are added by that hospital's own Admin, not here.
+              </p>
             </div>
-            <button
-              onClick={() => setShowAddAdminModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-            >
-              <UserPlus size={16} /> Add Admin
-            </button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left">
@@ -728,73 +709,6 @@ function SuperAdminDashboard() {
                 <button type="submit" disabled={savingHospital}
                   className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400">
                   {savingHospital ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Add Admin Modal */}
-      {showAddAdminModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="backdrop-blur-md bg-white/5 border border-white/20 rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl">
-            <div className="flex items-start justify-between gap-3 mb-4">
-              <h3 className="text-lg font-bold text-slate-900">Add New Admin</h3>
-              <button
-                type="button"
-                aria-label="Close"
-                onClick={() => setShowAddAdminModal(false)}
-                className="text-slate-500 hover:text-slate-700 transition-colors"
-              >
-                <span className="text-2xl leading-none">×</span>
-              </button>
-            </div>
-
-            <form onSubmit={handleAddAdmin} className="space-y-4 font-semibold">
-
-              <div>
-                <label className="text-sm font-medium text-slate-700">Username</label>
-                <input
-                  type="text"
-                  required
-                  value={newAdmin.username}
-                  onChange={(e) => setNewAdmin({ ...newAdmin, username: e.target.value })}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-slate-700">Email</label>
-                <input
-                  type="email"
-                  value={newAdmin.email}
-                  onChange={(e) => setNewAdmin({ ...newAdmin, email: e.target.value })}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-slate-700">Password</label>
-                <input
-                  type="password"
-                  required
-                  value={newAdmin.password}
-                  onChange={(e) => setNewAdmin({ ...newAdmin, password: e.target.value })}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1"
-                />
-              </div>
-              <div className="flex gap-3 justify-end">
-                <button
-                  type="button"
-                  onClick={() => setShowAddAdminModal(false)}
-                  className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
-                >
-                  Add Admin
                 </button>
               </div>
             </form>
