@@ -4,7 +4,7 @@ import {
   loginUser,
   loginAdmin,
   loginSuperAdmin,
-  registerAdmin,
+  addCoAdmin,
   listAdmins,
   deleteAdmin,
   listUsers,
@@ -32,8 +32,12 @@ router.post('/change_password', authenticate, changePassword);
 
 // Admin auth
 router.post('/admin/login',    loginAdmin);
-router.post('/admin/register', registerAdmin);
 router.post('/admin/logout',   logout);
+
+// An existing Admin adding another admin to their own hospital - hospital_id
+// comes from the authenticated Admin's own token, never from the request
+// body, so there's no way to target another hospital.
+router.post('/admin/co-admin', authenticate, authorize('Admin'), addCoAdmin);
 
 // SuperAdmin auth
 router.post('/superadmin/login', loginSuperAdmin);

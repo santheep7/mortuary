@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mortuary_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      PG_HOST: localhost
+      PG_PORT: 5432
+      PG_USER: postgres
+      PG_PASSWORD: postgres
+      PG_DATABASE: mortuary_ci
+      PORT: 3001
+      JWT_SECRET: ci-only-secret-not-used-anywhere-real
+      SMOKE_BASE_URL: http://localhost:3001/api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install server dependencies
+        working-directory: server
+        run: npm install
+
+      - name: Install client dependencies
+        working-directory: client
+        run: npm install
+
+      - name: Start server
+        working-directory: server
+        run: node server.js > server.log 2>&1 &
+
+      - name: Run smoke tests
+        working-directory: server
+        run: node tests/smoke.js
+
+      - name: Show server log on failure
+        if: failure()
+        working-directory: server
+        run: cat server.log
+
+      - name: Build client
+        working-directory: client
+        run: npm run build

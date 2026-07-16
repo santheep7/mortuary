@@ -7,7 +7,7 @@ import {
 import {
   Users, Bed, Receipt, LogOut, Clock, ShieldAlert,
   Activity, AlertTriangle, CheckSquare, Sparkles, TrendingUp,
-  UserPlus, ArrowRight, ArrowUpDown, UserCheck
+  UserPlus, ArrowRight, ArrowUpDown, UserCheck, ShieldPlus
 } from 'lucide-react';
 
 import { API_BASE } from '../config.js';
@@ -25,6 +25,24 @@ function AdminDashboard() {
   const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
   const [selectedUserForReset, setSelectedUserForReset] = useState(null);
   const [newPassword, setNewPassword] = useState('');
+  const [showAddCoAdminModal, setShowAddCoAdminModal] = useState(false);
+  const [newCoAdmin, setNewCoAdmin] = useState({ username: '', email: '', password: '' });
+  const [addingCoAdmin, setAddingCoAdmin] = useState(false);
+
+  const handleAddCoAdmin = async (e) => {
+    e.preventDefault();
+    setAddingCoAdmin(true);
+    try {
+      await axios.post(`${API_BASE}/admin/co-admin`, newCoAdmin);
+      setShowAddCoAdminModal(false);
+      setNewCoAdmin({ username: '', email: '', password: '' });
+      alert('Co-admin added successfully');
+    } catch (error) {
+      alert('Error adding co-admin: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setAddingCoAdmin(false);
+    }
+  };
 
   // Sorting state for occupied cabins table
   const [sortConfig, setSortConfig] = useState({ key: 'cabinNumber', direction: 'asc' });
@@ -574,6 +592,22 @@ function AdminDashboard() {
                   <ArrowRight size={14} className="text-slate-400 group-hover:translate-x-0.5 transition-transform" />
                 </div>
               </Link>
+              <button
+                type="button"
+                onClick={() => setShowAddCoAdminModal(true)}
+                className="group flex items-center justify-between p-3.5 bg-slate-50/50 hover:bg-slate-50 border border-slate-200 rounded-xl transition-all text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-slate-100 rounded-lg text-slate-600 group-hover:scale-110 transition-transform">
+                    <ShieldPlus size={16} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-800">Add Co-Admin</p>
+                    <p className="text-[10px] text-slate-500">Give another admin access to this hospital</p>
+                  </div>
+                </div>
+                <ArrowRight size={14} className="text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+              </button>
             </div>
           </div>
 
@@ -881,6 +915,73 @@ function AdminDashboard() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showAddCoAdminModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" onClick={() => setShowAddCoAdminModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-800">Add Co-Admin</h2>
+              <button onClick={() => setShowAddCoAdminModal(false)} className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              They'll get full Admin access to this hospital only.
+            </p>
+            <form onSubmit={handleAddCoAdmin} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                <input
+                  type="text"
+                  required
+                  value={newCoAdmin.username}
+                  onChange={(e) => setNewCoAdmin({ ...newCoAdmin, username: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={newCoAdmin.email}
+                  onChange={(e) => setNewCoAdmin({ ...newCoAdmin, email: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  value={newCoAdmin.password}
+                  onChange={(e) => setNewCoAdmin({ ...newCoAdmin, password: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Min 8 characters"
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  disabled={addingCoAdmin}
+                  className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  {addingCoAdmin ? 'Adding...' : 'Add Co-Admin'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddCoAdminModal(false)}
+                  className="flex-1 bg-gray-100 text-gray-700 py-2 px-4 rounded-lg font-semibold hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

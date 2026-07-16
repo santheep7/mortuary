@@ -25,9 +25,7 @@ import {
   UserCheck,
   Menu,
   X,
-  Building2,
-  Building,
-  ShieldCheck
+  Building2
 } from 'lucide-react';
 
 export default function Dashboard_Base() {
@@ -68,7 +66,6 @@ export default function Dashboard_Base() {
     navItems = [
       { path: '/dashboard/superadmin-dashboard', icon: LayoutDashboard, label: 'SuperAdmin Dashboard' },
       { path: '/dashboard/superadmin-dashboard?tab=hospital', icon: Building2, label: 'Add Hospital' },
-      { path: '/dashboard/superadmin-dashboard?tab=admin', icon: ShieldCheck, label: 'Add Admin' },
     ];
   }
   else if (role === "Admin") {
@@ -217,6 +214,9 @@ export default function Dashboard_Base() {
                 <Menu size={22} />
               </button>
 
+              {role !== "SuperAdmin" && mortuaryLogo && (
+                <img src={getUploadUrl(mortuaryLogo)} alt="Logo" className="h-10 w-10 object-contain hidden sm:block shrink-0" />
+              )}
               <div className="min-w-0">
                 <h2 className="text-base sm:text-xl font-semibold text-gray-800 truncate">Mortuary Management System</h2>
                 {role === "SuperAdmin" ? null : (
@@ -226,8 +226,6 @@ export default function Dashboard_Base() {
             </div>
 
             <div className="flex items-center gap-4 shrink-0">
-              {/* Mortuary logo removed from the shared header to avoid duplicate logo display on SuperAdmin */}
-              <div className="hidden sm:block"></div>
               <span className="text-sm text-gray-500 hidden md:block">
 
                 {new Date().toLocaleDateString('en-IN', {
