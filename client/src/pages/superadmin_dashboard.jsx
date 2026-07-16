@@ -9,6 +9,8 @@ import { API_BASE, getUploadUrl } from '../config.js';
 import { useMortuaryName } from '../context/MortuaryNameContext.jsx';
 
 function SuperAdminDashboard() {
+  const { search } = window.location;
+  const tab = new URLSearchParams(search).get('tab');
   const [stats, setStats] = useState(null);
   const [admins, setAdmins] = useState([]);
   const [mortuaryName, setMortuaryName] = useState('');
@@ -39,6 +41,13 @@ function SuperAdminDashboard() {
 
   const navigate = useNavigate();
   const { updateMortuaryLogo, fetchMortuarySettings } = useMortuaryName();
+
+  useEffect(() => {
+    if (!tab) return;
+    if (tab === 'hospital') setShowAddHospitalModal(true);
+    if (tab === 'admin') setShowAddAdminModal(true);
+  }, [tab]);
+
 
   useEffect(() => {
     console.log('SuperAdminDashboard mounted');
@@ -253,30 +262,10 @@ function SuperAdminDashboard() {
                 <Shield size={12} /> SuperAdmin Control Center
               </div>
               <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900">SuperAdmin Dashboard</h1>
-              <p className="text-sm text-slate-500">{mortuaryName}</p>
+              {/* Mortuary name removed for SuperAdmin (shared layout hides it) */}
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <button
-                onClick={() => setShowUploadLogoModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors"
-              >
-                <Edit size={16} /> Upload Logo
-              </button>
-              <button
-                onClick={() => {
-                  setEditMortuaryName(mortuaryName);
-                  setShowEditMortuaryModal(true);
-                }}
-                className="flex items-center gap-2 px-4 py-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors"
-              >
-                <Edit size={16} /> Edit Name
-              </button>
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
-              >
-                <LogOut size={16} /> Logout
-              </button>
+              {/* actions intentionally hidden */}
             </div>
           </div>
         </div>
@@ -490,44 +479,61 @@ function SuperAdminDashboard() {
       {/* Add Hospital Modal */}
       {showAddHospitalModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-bold text-slate-800 mb-4">Onboard New Hospital</h3>
-            <form onSubmit={handleAddHospital} className="space-y-4">
+          <div className="backdrop-blur-md bg-white/5 border border-white/20 rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <h3 className="text-lg font-bold text-slate-900">Onboard New Hospital</h3>
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => {
+                  setShowAddHospitalModal(false);
+                  setNewHospital(emptyHospitalForm);
+                  setNewHospitalLogo(null);
+                }}
+                className="text-slate-800 hover:text-slate-900 transition-colors"
+              >
+                <span className="text-2xl font-extrabold leading-none">×</span>
+              </button>
+            </div>
+            <form onSubmit={handleAddHospital} className="space-y-4 text-slate-800 font-semibold">
+
+
+
               <div>
-                <label className="text-sm font-medium text-slate-700">Hospital Name</label>
+                <label className="text-sm font-extrabold text-slate-800">Hospital Name</label>
                 <input type="text" required value={newHospital.name}
                   onChange={(e) => setNewHospital({ ...newHospital, name: e.target.value })}
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-700">Client ID</label>
+                <label className="text-sm font-extrabold text-slate-800">Client ID</label>
                 <input type="text" value={newHospital.client_id} placeholder="Leave blank to auto-generate"
                   onChange={(e) => setNewHospital({ ...newHospital, client_id: e.target.value.toUpperCase() })}
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
-                <p className="text-xs text-slate-500 mt-1">Staff type this at registration/login to identify this hospital.</p>
+                <p className="text-xs font-extrabold text-slate-800 mt-1">Staff type this at registration/login to identify this hospital.</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-sm font-medium text-slate-700">Contact Email</label>
-                  <input type="email" value={newHospital.contact_email}
+                  <div>
+                    <label className="text-sm font-extrabold text-slate-800">Contact Email</label>
+                    <input type="email" value={newHospital.contact_email}
                     onChange={(e) => setNewHospital({ ...newHospital, contact_email: e.target.value })}
                     className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-slate-700">Contact Phone</label>
-                  <input type="text" value={newHospital.contact_phone}
+                  <div>
+                    <label className="text-sm font-extrabold text-slate-900">Contact Phone</label>
+                    <input type="text" value={newHospital.contact_phone}
                     onChange={(e) => setNewHospital({ ...newHospital, contact_phone: e.target.value })}
                     className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
                 </div>
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-700">Address</label>
+                <label className="text-sm font-extrabold text-slate-800">Address</label>
                 <input type="text" value={newHospital.address}
                   onChange={(e) => setNewHospital({ ...newHospital, address: e.target.value })}
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-700">Logo</label>
+                <label className="text-sm font-extrabold text-slate-800">Logo</label>
                 <input type="file" accept="image/*"
                   onChange={(e) => setNewHospitalLogo(e.target.files[0])}
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
@@ -535,7 +541,7 @@ function SuperAdminDashboard() {
 
               <hr className="border-slate-200" />
               <div>
-                <label className="text-sm font-medium text-slate-700">Pricing Model</label>
+                <label className="text-sm font-extrabold text-slate-900">Pricing Model</label>
                 <select value={newHospital.pricing_model}
                   onChange={(e) => setNewHospital({ ...newHospital, pricing_model: e.target.value })}
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1">
@@ -548,13 +554,13 @@ function SuperAdminDashboard() {
               {newHospital.pricing_model === 'tiered_flat_hourly' && (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-sm font-medium text-slate-700">First Day Charge (₹)</label>
+                    <label className="text-sm font-extrabold text-slate-800">First Day Charge (₹)</label>
                     <input type="number" min="0" value={newHospital.first_day_charge}
                       onChange={(e) => setNewHospital({ ...newHospital, first_day_charge: e.target.value })}
                       className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-slate-700">Hourly Rate After 24h (₹)</label>
+                    <label className="text-sm font-extrabold text-slate-800">Hourly Rate After 24h (₹)</label>
                     <input type="number" min="0" value={newHospital.hourly_charge_after_24hrs}
                       onChange={(e) => setNewHospital({ ...newHospital, hourly_charge_after_24hrs: e.target.value })}
                       className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
@@ -563,30 +569,30 @@ function SuperAdminDashboard() {
               )}
               {newHospital.pricing_model === 'flat_daily' && (
                 <div>
-                  <label className="text-sm font-medium text-slate-700">Daily Rate (₹)</label>
+                  <label className="text-sm font-extrabold text-slate-800">Daily Rate (₹)</label>
                   <input type="number" min="0" value={newHospital.daily_rate}
                     onChange={(e) => setNewHospital({ ...newHospital, daily_rate: e.target.value })}
                     className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
                 </div>
               )}
               <div>
-                <label className="text-sm font-medium text-slate-700">Staff Welfare Discount (%)</label>
-                <input type="number" min="0" max="100" value={newHospital.staff_discount_percent}
+                    <label className="text-sm font-extrabold text-slate-900">Staff Welfare Discount (%)</label>
+                    <input type="number" min="0" max="100" value={newHospital.staff_discount_percent}
                   onChange={(e) => setNewHospital({ ...newHospital, staff_discount_percent: e.target.value })}
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
               </div>
 
               <hr className="border-slate-200" />
-              <p className="text-xs text-slate-500">First Admin account for this hospital - hand these credentials to the hospital.</p>
+              <p className="text-xs font-extrabold text-slate-800">First Admin account for this hospital - hand these credentials to the hospital.</p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-sm font-medium text-slate-700">Admin Username</label>
+                  <label className="text-sm font-extrabold text-slate-800">Admin Username</label>
                   <input type="text" required value={newHospital.adminUsername}
                     onChange={(e) => setNewHospital({ ...newHospital, adminUsername: e.target.value })}
                     className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-slate-700">Admin Password</label>
+                  <label className="text-sm font-extrabold text-slate-800">Admin Password</label>
                   <input type="password" required minLength={8} value={newHospital.adminPassword}
                     onChange={(e) => setNewHospital({ ...newHospital, adminPassword: e.target.value })}
                     className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
@@ -613,8 +619,23 @@ function SuperAdminDashboard() {
       {showEditHospitalModal && editHospital && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-bold text-slate-800 mb-4">Edit Hospital</h3>
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <h3 className="text-lg font-bold text-slate-800">Edit Hospital</h3>
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => {
+                  setShowEditHospitalModal(false);
+                  setEditHospital(null);
+                  setEditHospitalLogo(null);
+                }}
+                className="text-slate-800 hover:text-slate-900 transition-colors"
+              >
+                <span className="text-2xl leading-none">×</span>
+              </button>
+            </div>
             <form onSubmit={handleUpdateHospital} className="space-y-4">
+
               <div>
                 <label className="text-sm font-medium text-slate-700">Hospital Name</label>
                 <input type="text" required value={editHospital.name}
@@ -717,9 +738,21 @@ function SuperAdminDashboard() {
       {/* Add Admin Modal */}
       {showAddAdminModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-bold text-slate-800 mb-4">Add New Admin</h3>
-            <form onSubmit={handleAddAdmin} className="space-y-4">
+          <div className="backdrop-blur-md bg-white/5 border border-white/20 rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <h3 className="text-lg font-bold text-slate-900">Add New Admin</h3>
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => setShowAddAdminModal(false)}
+                className="text-slate-500 hover:text-slate-700 transition-colors"
+              >
+                <span className="text-2xl leading-none">×</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleAddAdmin} className="space-y-4 font-semibold">
+
               <div>
                 <label className="text-sm font-medium text-slate-700">Username</label>
                 <input
@@ -773,8 +806,22 @@ function SuperAdminDashboard() {
       {showEditMortuaryModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-bold text-slate-800 mb-4">Edit Mortuary Name</h3>
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <h3 className="text-lg font-bold text-slate-800">Edit Mortuary Name</h3>
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => {
+                  setShowEditMortuaryModal(false);
+                  setEditMortuaryName('');
+                }}
+                className="text-slate-500 hover:text-slate-700 transition-colors"
+              >
+                <span className="text-2xl leading-none">×</span>
+              </button>
+            </div>
             <form onSubmit={handleUpdateMortuaryName} className="space-y-4">
+
               <div>
                 <label className="text-sm font-medium text-slate-700">Mortuary Name</label>
                 <input
@@ -813,8 +860,23 @@ function SuperAdminDashboard() {
       {showUploadLogoModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-bold text-slate-800 mb-4">Upload Mortuary Logo</h3>
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <h3 className="text-lg font-bold text-slate-800">Upload Mortuary Logo</h3>
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => {
+                  setShowUploadLogoModal(false);
+                  setLogoFile(null);
+                }}
+                className="text-slate-500 hover:text-slate-700 transition-colors"
+                disabled={uploadingLogo}
+              >
+                <span className="text-2xl leading-none">×</span>
+              </button>
+            </div>
             {mortuaryLogo && (
+
               <div className="mb-4 flex justify-center">
                 <img src={getUploadUrl(mortuaryLogo)} alt="Current Logo" className="h-24 w-auto object-contain border rounded" />
               </div>

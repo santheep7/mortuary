@@ -59,4 +59,3 @@ router.post('/admin/users/:id/reset_password', authenticate, authorize('Admin', 
 router.post('/admin/reset-password', authenticate, authorize('Admin', 'SuperAdmin'), resetUserPassword);
 
 export default router;
-

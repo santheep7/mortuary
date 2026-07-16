@@ -13,7 +13,7 @@ export const useMortuaryName = () => {
 };
 
 export const MortuaryNameProvider = ({ children }) => {
-  const [mortuaryName, setMortuaryName] = useState('MOSC Medical College Mortuary');
+  const [mortuaryName, setMortuaryName] = useState(null);
   const [mortuaryLogo, setMortuaryLogo] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -40,7 +40,7 @@ export const MortuaryNameProvider = ({ children }) => {
         axios.get(`${API_BASE}/billing-settings/mortuary-name`),
         axios.get(`${API_BASE}/billing-settings/mortuary-logo`)
       ]);
-      setMortuaryName(nameRes.data.mortuary_name || 'MOSC Medical College Mortuary');
+      setMortuaryName(nameRes.data.mortuary_name || null);
       setMortuaryLogo(logoRes.data.mortuary_logo);
     } catch (error) {
       console.error('Error fetching mortuary settings:', error);

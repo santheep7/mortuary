@@ -130,7 +130,7 @@ function ApprovalModal({ onGoToLogin }) {
 
 export default function Auth() {
   const navigate = useNavigate();
-  const { fetchMortuarySettings } = useMortuaryName();
+  const { fetchMortuarySettings, updateMortuaryLogo, updateMortuaryName } = useMortuaryName();
   const [isLogin, setIsLogin] = useState(true);
   const [loginForm, setLoginForm] = useState(initialLoginForm);
   const [registerForm, setRegisterForm] = useState(initialRegisterForm);
@@ -227,10 +227,18 @@ export default function Auth() {
     try {
       const res = await axios.get(`${API_BASE}/hospitals/by-employee-id/${employeeId}`);
       if (latestEmployeeIdLookup.current !== employeeId) return; // stale response
-      setLoginClientLogo(res.data?.mortuary_logo || null);
+      const logo = res.data?.mortuary_logo || null;
+      const name = res.data?.mortuary_name || null;
+      setLoginClientLogo(logo);
+      // Update left-panel branding immediately
+      updateMortuaryLogo(logo);
+      updateMortuaryName(name);
     } catch (error) {
       if (latestEmployeeIdLookup.current !== employeeId) return;
       setLoginClientLogo(null);
+      // Clear left-panel branding
+      updateMortuaryLogo(null);
+      updateMortuaryName(null);
     }
   };
 
@@ -239,10 +247,18 @@ export default function Auth() {
     try {
       const res = await axios.get(`${API_BASE}/hospitals/by-client-id/${clientId}`);
       if (latestClientIdLookup.current !== clientId) return; // stale response
-      setRegisterClientLogo(res.data?.mortuary_logo || null);
+      const logo = res.data?.mortuary_logo || null;
+      const name = res.data?.mortuary_name || null;
+      setRegisterClientLogo(logo);
+      // Update left-panel branding immediately
+      updateMortuaryLogo(logo);
+      updateMortuaryName(name);
     } catch (error) {
       if (latestClientIdLookup.current !== clientId) return;
       setRegisterClientLogo(null);
+      // Clear left-panel branding
+      updateMortuaryLogo(null);
+      updateMortuaryName(null);
     }
   };
 
@@ -346,6 +362,17 @@ export default function Auth() {
     }
   };
 
+  // Login and register are separate forms with separate lookups (employee
+  // ID vs Client ID) but share one branding context for the left panel.
+  // Without this, switching forms keeps showing whatever the other form's
+  // last lookup resolved to, even though the new form hasn't looked
+  // anything up yet.
+  useEffect(() => {
+    updateMortuaryLogo(null);
+    updateMortuaryName(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLogin]);
+
   const toggleMode = () => {
     setIsLogin(!isLogin);
     setSubmitStatus(null);
@@ -382,14 +409,14 @@ export default function Auth() {
               iconPath={USER_ICON}
             />
             {loginClientLogo && (
-              <div className="flex items-center justify-center p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="hidden" aria-hidden="true">
                 <img
                   src={getUploadUrl(loginClientLogo)}
                   alt="Client Logo"
-                  className="h-16 w-auto object-contain"
                 />
               </div>
             )}
+
 
             <div>
               <div className="flex items-center justify-between mb-1">

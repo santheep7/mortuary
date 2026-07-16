@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { API_BASE } from "../config.js";
@@ -33,6 +33,36 @@ export default function Login() {
   const [errors, setErrors] = useState({});
   const [submitStatus, setSubmitStatus] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [hospitalName, setHospitalName] = useState(null);
+  const [hospitalLogo, setHospitalLogo] = useState(null);
+  const debounceRef = useRef(null);
+
+  // Fetch hospital info when employee ID changes (debounced 600ms)
+  useEffect(() => {
+    const id = form.employeeId.trim();
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (id.length < 3) {
+      setHospitalName(null);
+      setHospitalLogo(null);
+      return;
+    }
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/hospitals/by-employee-id/${encodeURIComponent(id)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setHospitalName(data.mortuary_name || null);
+          setHospitalLogo(data.mortuary_logo || null);
+        } else {
+          setHospitalName(null);
+          setHospitalLogo(null);
+        }
+      } catch {
+        setHospitalName(null);
+        setHospitalLogo(null);
+      }
+    }, 600);
+  }, [form.employeeId]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -83,8 +113,12 @@ export default function Login() {
   };
 
   return (
-    <AuthShell iconPath={LOCK_ICON} title="Welcome Back" subtitle="Sign in to your staff account" portalLabel="Staff Portal">
+    <AuthShell hospitalName={hospitalName} hospitalLogo={hospitalLogo}>
       {showForgotPasswordModal && <ForgotPasswordModal onClose={() => setShowForgotPasswordModal(false)} />}
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-indigo-600">Welcome back</h1>
+        <p className="text-sm text-indigo-400 mt-1">Sign in to continue to your account.</p>
+      </div>
       <StatusBanner type={submitStatus?.type} message={submitStatus?.message} />
 
       <form onSubmit={handleSubmit} noValidate className="space-y-5">
