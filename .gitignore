@@ -35,3 +35,6 @@ client/build/
 
 # Logs
 *.log
+
+# Personal work diary (not for the repo, just my own notes)
+WORK_DIARY.md
