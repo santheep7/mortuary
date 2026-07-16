@@ -7,21 +7,68 @@ import {
 import {
   Users, Bed, Receipt, LogOut, Clock, ShieldAlert,
   Activity, AlertTriangle, CheckSquare, Sparkles, TrendingUp,
-  UserPlus, ArrowRight, ArrowUpDown, UserCheck
+  UserPlus, ArrowRight, ArrowUpDown, UserCheck, ShieldPlus
 } from 'lucide-react';
 
 import { API_BASE } from '../config.js';
+import { useMortuaryName } from '../context/MortuaryNameContext.jsx';
 
 function AdminDashboard() {
+  const { mortuaryName } = useMortuaryName();
   const [stats, setStats] = useState(null);
   const [cabins, setCabins] = useState([]);
   const [allocations, setAllocations] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pendingUsersCount, setPendingUsersCount] = useState(0);
+  const [passwordResetRequests, setPasswordResetRequests] = useState([]);
+  const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
+  const [selectedUserForReset, setSelectedUserForReset] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [showAddCoAdminModal, setShowAddCoAdminModal] = useState(false);
+  const [newCoAdmin, setNewCoAdmin] = useState({ username: '', email: '', password: '' });
+  const [addingCoAdmin, setAddingCoAdmin] = useState(false);
+
+  const handleAddCoAdmin = async (e) => {
+    e.preventDefault();
+    setAddingCoAdmin(true);
+    try {
+      await axios.post(`${API_BASE}/admin/co-admin`, newCoAdmin);
+      setShowAddCoAdminModal(false);
+      setNewCoAdmin({ username: '', email: '', password: '' });
+      alert('Co-admin added successfully');
+    } catch (error) {
+      alert('Error adding co-admin: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setAddingCoAdmin(false);
+    }
+  };
 
   // Sorting state for occupied cabins table
   const [sortConfig, setSortConfig] = useState({ key: 'cabinNumber', direction: 'asc' });
+
+  const handlePasswordReset = async () => {
+    if (!selectedUserForReset || !newPassword || newPassword.length < 8) {
+      alert('Password must be at least 8 characters');
+      return;
+    }
+
+    try {
+      await axios.post(`${API_BASE}/admin/reset-password`, {
+        userId: selectedUserForReset.id,
+        newPassword: newPassword
+      });
+      alert('Password reset successfully. User must change password on next login.');
+      setShowPasswordResetModal(false);
+      setSelectedUserForReset(null);
+      setNewPassword('');
+      // Refresh password reset requests
+      const resetRes = await axios.get(`${API_BASE}/admin/password-requests`);
+      setPasswordResetRequests(resetRes.data || []);
+    } catch (error) {
+      alert('Failed to reset password: ' + (error.response?.data?.message || 'Unknown error'));
+    }
+  };
 
   useEffect(() => {
     fetchDashboardData();
@@ -48,7 +95,17 @@ function AdminDashboard() {
         });
         const pending = (usersRes.data || []).filter(u => u.approval_status === 'pending').length;
         setPendingUsersCount(pending);
-      } catch { /* non-critical */ }
+      } catch (err) {
+        console.error('Failed to fetch users:', err);
+      }
+
+      // Fetch password reset requests
+      try {
+        const resetRes = await axios.get(`${API_BASE}/admin/password-requests`);
+        setPasswordResetRequests(resetRes.data || []);
+      } catch (err) {
+        console.error('Failed to fetch password reset requests:', err);
+      }
 
     } catch (error) {
       console.error('Error loading admin dashboard data:', error);
@@ -270,7 +327,7 @@ function AdminDashboard() {
             Admin Dashboard
           </h1>
           <p className="text-sm text-slate-500">
-            MOSC Medical College Command Center • System configuration and live resource tracking
+            {mortuaryName} • System configuration and live resource tracking
           </p>
         </div>
         <button 
@@ -282,7 +339,7 @@ function AdminDashboard() {
       </div>
 
       {/* SECTION 1: Executive KPI Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-4">
         {[
           { label: 'Total Bodies', val: stats?.totalBodies || 0, icon: Users, color: 'text-blue-600 bg-blue-50 border-blue-100' },
           { label: 'Active Stay', val: computedMetrics.occupied, icon: Bed, color: 'text-red-600 bg-red-50 border-red-100' },
@@ -306,10 +363,10 @@ function AdminDashboard() {
       </div>
 
       {/* Primary Layout Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+
         {/* Left Column: Live Matrix Grid & Stay Log (occupies 2 cols on desktop) */}
-        <div className="lg:col-span-2 space-y-8">
+        <div className="xl:col-span-2 space-y-8">
           
           {/* SECTION 2: Live Cabin Status Matrix */}
           <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
@@ -526,6 +583,22 @@ function AdminDashboard() {
                   <ArrowRight size={14} className="text-slate-400 group-hover:translate-x-0.5 transition-transform" />
                 </div>
               </Link>
+              <button
+                type="button"
+                onClick={() => setShowAddCoAdminModal(true)}
+                className="group flex items-center justify-between p-3.5 bg-slate-50/50 hover:bg-slate-50 border border-slate-200 rounded-xl transition-all text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-slate-100 rounded-lg text-slate-600 group-hover:scale-110 transition-transform">
+                    <ShieldPlus size={16} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-800">Add Co-Admin</p>
+                    <p className="text-[10px] text-slate-500">Give another admin access to this hospital</p>
+                  </div>
+                </div>
+                <ArrowRight size={14} className="text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+              </button>
             </div>
           </div>
 
@@ -577,6 +650,40 @@ function AdminDashboard() {
             </div>
           </div>
 
+          {/* Password Reset Requests Panel */}
+          <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm p-6 space-y-4">
+            <div>
+              <h2 className="text-base font-bold text-slate-800">Password Reset Requests</h2>
+              <p className="text-xs text-slate-500 font-medium">Staff members requesting password assistance</p>
+            </div>
+            {passwordResetRequests.length > 0 ? (
+              <div className="space-y-3">
+                {passwordResetRequests.map((user) => (
+                  <div key={user.id} className="border border-slate-100 rounded-lg p-3 flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="font-semibold text-slate-800 text-sm">{user.full_name}</div>
+                      <div className="text-xs text-slate-500">{user.employee_id} • {user.department}</div>
+                      <div className="text-xs text-slate-400">{user.email}</div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSelectedUserForReset(user);
+                        setShowPasswordResetModal(true);
+                      }}
+                      className="ml-3 px-3 py-1.5 bg-blue-50 text-blue-600 text-xs font-semibold rounded-lg hover:bg-blue-100 transition-colors"
+                    >
+                      Reset Password
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-4 text-xs text-slate-400">
+                No pending password reset requests
+              </div>
+            )}
+          </div>
+
           {/* System Information Panel */}
           <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm p-6 space-y-4">
             <div>
@@ -586,7 +693,7 @@ function AdminDashboard() {
             <div className="divide-y divide-slate-100 text-xs">
               <div className="flex justify-between items-center py-2.5">
                 <span className="text-slate-500 font-medium">Facility</span>
-                <span className="font-bold text-slate-800">MOSC Medical College</span>
+                <span className="font-bold text-slate-800">{mortuaryName}</span>
               </div>
               <div className="flex justify-between items-center py-2.5">
                 <span className="text-slate-500 font-medium">Location</span>
@@ -751,6 +858,124 @@ function AdminDashboard() {
           </table>
         </div>
       </div>
+
+      {/* Password Reset Modal */}
+      {showPasswordResetModal && selectedUserForReset && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" onClick={() => setShowPasswordResetModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-800">Reset Password</h2>
+              <button onClick={() => setShowPasswordResetModal(false)} className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="mb-4">
+              <p className="text-sm text-gray-600">
+                Reset password for <strong>{selectedUserForReset.full_name}</strong> ({selectedUserForReset.employee_id})
+              </p>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter new password (min 8 characters)"
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={handlePasswordReset}
+                  className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                >
+                  Reset Password
+                </button>
+                <button
+                  onClick={() => {
+                    setShowPasswordResetModal(false);
+                    setSelectedUserForReset(null);
+                    setNewPassword('');
+                  }}
+                  className="flex-1 bg-gray-100 text-gray-700 py-2 px-4 rounded-lg font-semibold hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAddCoAdminModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" onClick={() => setShowAddCoAdminModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-800">Add Co-Admin</h2>
+              <button onClick={() => setShowAddCoAdminModal(false)} className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              They'll get full Admin access to this hospital only.
+            </p>
+            <form onSubmit={handleAddCoAdmin} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                <input
+                  type="text"
+                  required
+                  value={newCoAdmin.username}
+                  onChange={(e) => setNewCoAdmin({ ...newCoAdmin, username: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={newCoAdmin.email}
+                  onChange={(e) => setNewCoAdmin({ ...newCoAdmin, email: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  value={newCoAdmin.password}
+                  onChange={(e) => setNewCoAdmin({ ...newCoAdmin, password: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Min 8 characters"
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  disabled={addingCoAdmin}
+                  className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  {addingCoAdmin ? 'Adding...' : 'Add Co-Admin'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddCoAdminModal(false)}
+                  className="flex-1 bg-gray-100 text-gray-700 py-2 px-4 rounded-lg font-semibold hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

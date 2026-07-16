@@ -1,5 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
-import { queryAll, queryOne, runQuery } from '../config/db.js';
+import { queryAll, queryOne, runQuery, hospitalClause } from '../config/db.js';
+import { compressImage } from '../config/imageCompress.js';
+
+const DOCUMENT_MAX_DIMENSION = 1600;
 
 export async function createBodyRelease(req, res) {
   try {
@@ -7,6 +10,15 @@ export async function createBodyRelease(req, res) {
       bodyId, caseType, bodyTakenBy, relationship,
       address, contactNumber, policeStationName, siName
     } = req.body;
+
+    // The body's own hospital_id is the source of truth for the release
+    // record's tenant - also an ownership check against a guessed bodyId.
+    const bodyForHospital = await queryOne('SELECT hospital_id, status FROM bodies WHERE id = $1', [bodyId]);
+    if (!bodyForHospital) return res.status(404).json({ error: 'Body not found' });
+    if (req.hospitalId != null && bodyForHospital.hospital_id !== req.hospitalId) {
+      return res.status(404).json({ error: 'Body not found' });
+    }
+    const hospitalId = bodyForHospital.hospital_id;
 
     const invoice = await queryOne('SELECT * FROM billing WHERE "bodyId" = $1', [bodyId]);
     if (!invoice || invoice.status !== 'Settled') {
@@ -18,7 +30,7 @@ export async function createBodyRelease(req, res) {
       return res.status(400).json({ error: 'Body Dressing Service Bill must be settled before release' });
     }
 
-    const body = await queryOne('SELECT status FROM bodies WHERE id = $1', [bodyId]);
+    const body = bodyForHospital;
     if (body && body.status === 'RELEASED') {
       return res.status(400).json({ error: 'Body already released' });
     }
@@ -32,20 +44,25 @@ export async function createBodyRelease(req, res) {
       return res.status(422).json({ error: `Field ${missing} is required` });
     }
 
-    const nocCertificateUrl  = req.files?.nocFile?.[0]?.path || null;
-    const legalDocumentsUrl  = req.files?.legalDocumentsFile?.[0]?.path || null;
+    const nocFile           = req.files?.nocFile?.[0] || null;
+    const legalDocumentsFile = req.files?.legalDocumentsFile?.[0] || null;
+    if (nocFile)            await compressImage(nocFile.path, DOCUMENT_MAX_DIMENSION);
+    if (legalDocumentsFile)  await compressImage(legalDocumentsFile.path, DOCUMENT_MAX_DIMENSION);
+
+    const nocCertificateUrl  = nocFile?.path || null;
+    const legalDocumentsUrl  = legalDocumentsFile?.path || null;
 
     const id = uuidv4();
     await runQuery(`
       INSERT INTO body_releases (
         id, "bodyId", "releaseType", "takenBy", relationship, address,
-        "contactNumber", "policeStation", "siName", "nocDocument", "legalDocuments", "releaseDateTime"
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
+        "contactNumber", "policeStation", "siName", "nocDocument", "legalDocuments", "releaseDateTime", hospital_id
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),$12)
     `, [
       id, bodyId, caseType || 'NON_MLC', bodyTakenBy,
       relationship || null, address || null, contactNumber,
       policeStationName || null, siName || null,
-      nocCertificateUrl, legalDocumentsUrl
+      nocCertificateUrl, legalDocumentsUrl, hospitalId
     ]);
 
     await runQuery("UPDATE bodies SET status='RELEASED' WHERE id=$1", [bodyId]);
@@ -58,8 +75,8 @@ export async function createBodyRelease(req, res) {
       await runQuery("UPDATE cabins SET status='NEEDS_CLEANING' WHERE id=$1", [allocation.cabinId]);
 
       await runQuery(
-        'INSERT INTO housekeeping_tasks (id, "cabinId", status, "createdAt") VALUES ($1,$2,$3,NOW())',
-        [uuidv4(), allocation.cabinId, 'PENDING']
+        'INSERT INTO housekeeping_tasks (id, "cabinId", status, "createdAt", hospital_id) VALUES ($1,$2,$3,NOW(),$4)',
+        [uuidv4(), allocation.cabinId, 'PENDING', hospitalId]
       );
 
       await runQuery(
@@ -71,25 +88,28 @@ export async function createBodyRelease(req, res) {
     res.status(201).json({ message: 'Body released successfully', releaseId: id });
   } catch (error) {
     console.error('Body release error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
 export async function getBodyRelease(req, res) {
   try {
     const { bodyId } = req.params;
+    const hc = hospitalClause(req.hospitalId, 2);
     const release = await queryOne(
-      'SELECT * FROM body_releases WHERE "bodyId"=$1 ORDER BY "createdAt" DESC LIMIT 1',
-      [bodyId]
+      `SELECT * FROM body_releases WHERE "bodyId"=$1${hc.sql} ORDER BY "createdAt" DESC LIMIT 1`,
+      [bodyId, ...hc.params]
     );
     res.json(release || null);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
 export async function getReleaseHistory(req, res) {
   try {
+    const hc = hospitalClause(req.hospitalId, 1, 'br.hospital_id');
     const records = await queryAll(`
       SELECT
         br.id AS "releaseId",
@@ -140,11 +160,12 @@ export async function getReleaseHistory(req, res) {
       LEFT JOIN cabin_allocations ca ON ca."bodyId" = bo.id AND ca.status = 'Allocated'
       LEFT JOIN cabins c ON ca."cabinId" = c.id
       LEFT JOIN service_billing sb ON sb."bodyId" = bo.id
+      WHERE 1=1${hc.sql}
       ORDER BY br."releaseDateTime" DESC
-    `);
+    `, hc.params);
     res.json(records);
   } catch (error) {
     console.error('Release history error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }

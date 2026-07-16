@@ -334,8 +334,8 @@ function CabinMaster() {
       {/* Cabin Modal */}
       {showModal && activeTab === 'cabins' && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
-            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
               <h2 className="text-xl font-semibold text-gray-800">
                 {editingItem ? 'Edit Cabin' : 'Add Cabin'}
               </h2>
@@ -422,8 +422,8 @@ function CabinMaster() {
       {/* Authority Modal */}
       {showModal && activeTab === 'authorities' && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
-            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
               <h2 className="text-xl font-semibold text-gray-800">Add Concession Authority</h2>
               <button
                 onClick={() => setShowModal(false)}

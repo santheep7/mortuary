@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
-import { queryAll, queryOne, runQuery } from '../config/db.js';
+import { queryAll, queryOne, runQuery, hospitalClause } from '../config/db.js';
+import { getHospitalSettings, getMinimumAdvance, computeStayCharge } from '../config/pricing.js';
 
 function formatPgDateTime(date) {
   // Preserve local timezone instead of converting to UTC
@@ -19,19 +20,38 @@ export async function createAllocation(req, res) {
     if (!bodyId || !cabinId)
       return res.status(400).json({ error: 'bodyId and cabinId are required' });
 
-    const settings      = await queryOne('SELECT first_day_charge FROM system_settings LIMIT 1');
-    const firstDayCharge = settings ? Number(settings.first_day_charge) : 2100;
+    // SuperAdmin has no single hospital scope of their own - a write on their
+    // behalf must say which hospital it's for.
+    const hospitalId = req.hospitalId ?? req.body.hospitalId;
+    if (!hospitalId) return res.status(400).json({ error: 'hospitalId is required' });
 
-    const parsedAdvance = parseFloat(advanceAmount);
-    if (isNaN(parsedAdvance) || parsedAdvance < firstDayCharge) {
-      return res.status(400).json({ error: `Advance collection is mandatory and must be at least ₹${firstDayCharge}` });
+    // Both sides of the allocation must actually belong to that hospital -
+    // otherwise a hospital could link its body to another hospital's cabin.
+    const bodyOwned = await queryOne('SELECT id FROM bodies WHERE id = $1 AND hospital_id = $2', [bodyId, hospitalId]);
+    if (!bodyOwned) return res.status(404).json({ error: 'Body not found' });
+    const cabinOwned = await queryOne('SELECT id FROM cabins WHERE id = $1 AND hospital_id = $2', [cabinId, hospitalId]);
+    if (!cabinOwned) return res.status(404).json({ error: 'Cabin not found' });
+
+    const settings       = await getHospitalSettings(hospitalId);
+    const minimumAdvance = getMinimumAdvance(settings);
+    const firstDayCharge = minimumAdvance; // used below only to seed the allocation's stored rate
+
+    const parsedAdvance = parseFloat(advanceAmount) || 0;
+    if (parsedAdvance < minimumAdvance) {
+      return res.status(400).json({ error: `Advance collection is mandatory and must be at least ₹${minimumAdvance}` });
     }
 
     const existing = await queryOne(
-      "SELECT * FROM cabin_allocations WHERE \"bodyId\" = $1 AND status = 'Allocated'",
-      [bodyId]
+      "SELECT * FROM cabin_allocations WHERE \"bodyId\" = $1 AND status = 'Allocated' AND hospital_id = $2",
+      [bodyId, hospitalId]
     );
     if (existing) return res.status(400).json({ error: 'Body already has an active cabin allocation' });
+
+    const cabinInUse = await queryOne(
+      "SELECT * FROM cabin_allocations WHERE \"cabinId\" = $1 AND status = 'Allocated' AND hospital_id = $2",
+      [cabinId, hospitalId]
+    );
+    if (cabinInUse) return res.status(400).json({ error: 'This cabin is already occupied by another body' });
 
     const bodyRecord = await queryOne('SELECT "bodyType", "freezerRequired" FROM bodies WHERE id = $1', [bodyId]);
     if (bodyRecord && bodyRecord.bodyType === 'MLC' && bodyRecord.freezerRequired === 0) {
@@ -54,9 +74,9 @@ export async function createAllocation(req, res) {
     await runQuery(`
       INSERT INTO cabin_allocations
         (id, "bodyId", "cabinId", "admissionDateTime", "advanceAmount",
-         "hourlyRate", "minHours", "freeHours", "estimatedReleaseDateTime")
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-    `, [id, bodyId, cabinId, admissionStr, advanceAmount || 0, firstDayCharge, 1, 0, estimatedStr]);
+         "hourlyRate", "minHours", "freeHours", "estimatedReleaseDateTime", hospital_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+    `, [id, bodyId, cabinId, admissionStr, advanceAmount || 0, firstDayCharge, 1, 0, estimatedStr, hospitalId]);
 
     await runQuery("UPDATE cabins SET status = 'Occupied' WHERE id = $1", [cabinId]);
     await runQuery("UPDATE bodies SET status = 'Allocated' WHERE id = $1", [bodyId]);
@@ -72,7 +92,7 @@ export async function createAllocation(req, res) {
     res.json(allocation);
   } catch (error) {
     console.error('Error allocating cabin:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -88,20 +108,25 @@ export async function getAllocations(req, res) {
       WHERE 1=1
     `;
     const params = [];
-    if (status) { query += ' AND ca.status = $1'; params.push(status); }
+    let idx = 1;
+    if (status) { query += ` AND ca.status = $${idx++}`; params.push(status); }
+    const hc = hospitalClause(req.hospitalId, idx, 'ca.hospital_id');
+    query += hc.sql; params.push(...hc.params);
     query += ' ORDER BY ca."createdAt" DESC';
 
     const allocations = await queryAll(query, params);
     res.json(allocations);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
 export async function releaseAllocation(req, res) {
   try {
     const { id } = req.params;
-    const allocation = await queryOne('SELECT * FROM cabin_allocations WHERE id = $1', [id]);
+    const hc = hospitalClause(req.hospitalId, 2);
+    const allocation = await queryOne(`SELECT * FROM cabin_allocations WHERE id = $1${hc.sql}`, [id, ...hc.params]);
     if (!allocation) return res.status(404).json({ error: 'Allocation not found' });
 
     const body = await queryOne('SELECT billing_status FROM bodies WHERE id = $1', [allocation.bodyId]);
@@ -109,10 +134,20 @@ export async function releaseAllocation(req, res) {
       return res.status(400).json({ error: 'Bill must be settled before release' });
     }
 
-    await runQuery("UPDATE cabin_allocations SET status = 'Released' WHERE id = $1", [id]);
+    await runQuery(
+      "UPDATE cabin_allocations SET status = 'Released', \"releaseDateTime\" = NOW() WHERE id = $1",
+      [id]
+    );
+    await runQuery("UPDATE cabins SET status = 'NEEDS_CLEANING' WHERE id = $1", [allocation.cabinId]);
+    await runQuery(
+      'INSERT INTO housekeeping_tasks (id, "cabinId", status, "createdAt", hospital_id) VALUES ($1,$2,$3,NOW(),$4)',
+      [uuidv4(), allocation.cabinId, 'PENDING', allocation.hospital_id]
+    );
+
     res.json({ message: 'Marked as released successfully', releaseDateTime: new Date().toISOString() });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -121,7 +156,8 @@ export async function extendAllocation(req, res) {
     const { id } = req.params;
     const { expectedReleaseDateTime } = req.body;
 
-    const allocation = await queryOne('SELECT * FROM cabin_allocations WHERE id = $1', [id]);
+    const hc = hospitalClause(req.hospitalId, 2);
+    const allocation = await queryOne(`SELECT * FROM cabin_allocations WHERE id = $1${hc.sql}`, [id, ...hc.params]);
     if (!allocation) return res.status(404).json({ error: 'Allocation not found' });
 
     // Accept ISO or any parseable date string
@@ -129,40 +165,32 @@ export async function extendAllocation(req, res) {
       ? new Date(expectedReleaseDateTime).toISOString()
       : null;
 
-    await runQuery('UPDATE cabin_allocations SET "releaseDateTime" = $1 WHERE id = $2', [pgDateTime, id]);
-    res.json({ message: 'Release date updated successfully', releaseDateTime: pgDateTime });
+    await runQuery('UPDATE cabin_allocations SET "estimatedReleaseDateTime" = $1 WHERE id = $2', [pgDateTime, id]);
+    res.json({ message: 'Estimated release date updated successfully', estimatedReleaseDateTime: pgDateTime });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
 export async function calculateAllocation(req, res) {
   try {
     const { id } = req.params;
-    const allocation = await queryOne('SELECT * FROM cabin_allocations WHERE id = $1', [id]);
+    const hc = hospitalClause(req.hospitalId, 2);
+    const allocation = await queryOne(`SELECT * FROM cabin_allocations WHERE id = $1${hc.sql}`, [id, ...hc.params]);
     if (!allocation) return res.status(404).json({ error: 'Allocation not found' });
 
-    const settings    = await queryOne('SELECT first_day_charge, hourly_charge_after_24hrs FROM system_settings LIMIT 1');
-    const firstDayCharge = settings ? Number(settings.first_day_charge) : 2100;
-    const hourlyRate     = settings ? Number(settings.hourly_charge_after_24hrs) : 130;
+    const settings = await getHospitalSettings(allocation.hospital_id);
 
     const admissionDate = new Date(allocation.admissionDateTime);
     const endDate       = allocation.releaseDateTime ? new Date(allocation.releaseDateTime) : new Date();
     const diffMs        = endDate - admissionDate;
     const totalHours    = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60)));
 
-    let extraHours = 0, additionalHourCharges = 0, totalAmount = 0;
-
-    if (totalHours <= 24) {
-      totalAmount = firstDayCharge;
-    } else {
-      extraHours             = totalHours - 24;
-      additionalHourCharges  = extraHours * hourlyRate;
-      totalAmount            = firstDayCharge + additionalHourCharges;
-    }
+    const charge = computeStayCharge(settings, totalHours);
 
     const advance     = Number(allocation.advanceAmount) || 0;
-    const finalAmount = Math.max(0, totalAmount - advance);
+    const finalAmount = Math.max(0, charge.totalAmount - advance);
 
     // Format currentDateTime in local timezone
     const currentDateTimeStr = formatPgDateTime(endDate);
@@ -171,17 +199,18 @@ export async function calculateAllocation(req, res) {
       admissionDateTime: allocation.admissionDateTime,
       currentDateTime:   currentDateTimeStr,
       totalHours,
-      firstDayCharge,
-      extraHours,
-      hourlyRate,
-      additionalHourCharges,
-      totalAmount:   totalAmount.toFixed(2),
+      firstDayCharge: charge.firstDayCharge,
+      extraHours: charge.extraHours,
+      hourlyRate: charge.hourlyRate,
+      additionalHourCharges: charge.additionalHourCharges,
+      totalAmount:   charge.totalAmount.toFixed(2),
       advanceAmount: advance,
       finalAmount:   finalAmount.toFixed(2),
-      days:          Math.ceil(totalHours / 24),
-      dailyRate:     firstDayCharge
+      days:          charge.days,
+      dailyRate:     charge.dailyRate
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }

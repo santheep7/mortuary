@@ -40,13 +40,21 @@ export async function runQuery(sql, params = []) {
 }
 
 // ── Body-number generator ─────────────────────────────────────────────────────
-export async function generateBodyNumber() {
+// Prefixed with the hospital's own Client ID (e.g. "SUNH8261-2026-0001"),
+// not a hardcoded "MOSC-" - every hospital's bodies used to be numbered
+// with MOSC's own prefix and share one global sequence, regardless of which
+// hospital actually registered them. The sequence is also now scoped to
+// that hospital's own bodies via hospital_id, not just a LIKE-prefix match
+// on bodyNumber, so each hospital starts its own count at 0001.
+export async function generateBodyNumber(hospitalId) {
   try {
+    const hospital = await queryOne('SELECT client_id FROM hospitals WHERE id = $1', [hospitalId]);
+    const clientId = hospital?.client_id || 'HOSP';
     const year   = new Date().getFullYear();
-    const prefix = `MOSC-${year}-`;
+    const prefix = `${clientId}-${year}-`;
     const bodies = await queryAll(
-      "SELECT \"bodyNumber\" FROM bodies WHERE \"bodyNumber\" LIKE ?",
-      [`${prefix}%`]
+      'SELECT "bodyNumber" FROM bodies WHERE hospital_id = $1 AND "bodyNumber" LIKE $2',
+      [hospitalId, `${prefix}%`]
     );
     let maxNum = 0;
     for (const body of bodies) {
@@ -57,6 +65,18 @@ export async function generateBodyNumber() {
   } catch (error) {
     throw new Error('Failed to generate body number: ' + error.message);
   }
+}
+
+// ── Tenant scoping helper ─────────────────────────────────────────────────────
+// hospitalId === null means SuperAdmin (no single-hospital scope) - the filter
+// is skipped entirely so SuperAdmin queries see/manage every hospital's data.
+// Usage: build params up to the point of use, then:
+//   const hc = hospitalClause(req.hospitalId, params.length + 1, 'b.hospital_id');
+//   query += hc.sql; params.push(...hc.params);
+export function hospitalClause(hospitalId, idx, column = 'hospital_id') {
+  return hospitalId == null
+    ? { sql: '', params: [] }
+    : { sql: ` AND ${column} = $${idx}`, params: [hospitalId] };
 }
 
 // ── Column-existence helper ───────────────────────────────────────────────────
@@ -141,6 +161,8 @@ export async function initDatabase() {
         approval_status VARCHAR(20) NOT NULL DEFAULT 'pending'
                           CHECK (approval_status IN ('pending','approved','rejected')),
         admin_remarks   VARCHAR(500),
+        must_change_password BOOLEAN DEFAULT FALSE,
+        password_reset_requested BOOLEAN DEFAULT FALSE,
         created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -304,7 +326,36 @@ export async function initDatabase() {
       )
     `);
 
+    // ── Multi-tenancy: hospitals table ───────────────────────────────────────
+    // Phase 1 of the multi-hospital rework: one SuperAdmin managing many
+    // hospital clients from a shared database. This table + the hospital_id
+    // backfill below are the foundation everything else builds on (auth,
+    // per-hospital pricing, and Row-Level Security come in later steps -
+    // deliberately not bundled into this same migration).
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hospitals (
+        id            VARCHAR(36) PRIMARY KEY,
+        name          VARCHAR(255) NOT NULL,
+        logo          TEXT,
+        contact_email VARCHAR(150),
+        contact_phone VARCHAR(20),
+        address       TEXT,
+        is_active     BOOLEAN DEFAULT true,
+        "createdAt"   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt"   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // ── Idempotent column migrations ─────────────────────────────────────────
+    const TENANT_TABLES = [
+      'users', 'admin', 'bodies', 'cabins', 'cabin_allocations', 'billing',
+      'billing_services', 'service_billing', 'service_master',
+      'concession_authorities', 'housekeeping_tasks', 'body_releases',
+      'system_settings',
+    ];
+    // Note: body_types is deliberately excluded - it's a fixed universal
+    // vocabulary (MLC / Non-MLC), not hospital-specific data.
+
     const colMigrations = [
       // table, column, pg_type
       ['cabins',                 'cabin_type',               "VARCHAR(20) DEFAULT 'NORMAL_CABIN'"],
@@ -321,8 +372,23 @@ export async function initDatabase() {
       ['users',                  'approval_status',          "VARCHAR(20) NOT NULL DEFAULT 'pending'"],
       ['users',                  'admin_remarks',            'VARCHAR(500)'],
       ['users',                  'updated_at',               'TIMESTAMP DEFAULT CURRENT_TIMESTAMP'],
+      ['users',                  'must_change_password',     'BOOLEAN DEFAULT FALSE'],
+      ['users',                  'password_reset_requested', 'BOOLEAN DEFAULT FALSE'],
       ['system_settings',        'mortuary_name',            "VARCHAR(255) DEFAULT 'MOSC Medical College Mortuary'"],
       ['system_settings',        'mortuary_logo',            'TEXT'],
+      // Pricing engine (Phase 3): each hospital's system_settings row now
+      // also carries which pricing model it's on and that model's own knobs,
+      // instead of every hospital being forced into the same first-day+hourly
+      // formula. staff_discount_percent replaces the old hardcoded 100%
+      // staff-welfare waiver with a per-hospital configurable rate.
+      ['system_settings',        'pricing_model',            "VARCHAR(30) NOT NULL DEFAULT 'tiered_flat_hourly'"],
+      ['system_settings',        'daily_rate',               'NUMERIC(10,2) DEFAULT 500.00'],
+      ['system_settings',        'staff_discount_percent',   'NUMERIC(5,2) NOT NULL DEFAULT 100'],
+      // Short, human-typeable code staff enter at registration/login so the
+      // page can show their hospital's own name/logo before they're even
+      // authenticated - SuperAdmin assigns one per hospital at onboarding.
+      ['hospitals',              'client_id',                'VARCHAR(50)'],
+      ...TENANT_TABLES.map(table => [table, 'hospital_id', 'VARCHAR(36)']),
     ];
 
     for (const [table, column, type] of colMigrations) {
@@ -338,16 +404,151 @@ export async function initDatabase() {
       }
     }
 
-    // ── Seed defaults ─────────────────────────────────────────────────────────
-    const { rows: settingsRows } = await pool.query('SELECT COUNT(*) AS count FROM system_settings');
-    if (parseInt(settingsRows[0].count) === 0) {
+    // ── Backfill existing data into a default hospital ──────────────────────
+    // Ensure at least one hospital always exists (the pre-multi-tenant data's
+    // new home), then backfill any rows still missing hospital_id. Safe to
+    // run on every startup - once nothing is NULL, the backfill is a no-op.
+    let { rows: existingHospital } = await pool.query('SELECT id FROM hospitals LIMIT 1');
+    let defaultHospitalId = existingHospital[0]?.id;
+
+    if (!defaultHospitalId) {
+      defaultHospitalId = uuidv4();
       await pool.query(
-        'INSERT INTO system_settings (id, first_day_charge, hourly_charge_after_24hrs, updated_by) VALUES ($1, $2, $3, $4)',
-        [uuidv4(), 2100.00, 130.00, 'System']
+        'INSERT INTO hospitals (id, name) VALUES ($1, $2)',
+        [defaultHospitalId, 'MOSC Medical College Mortuary']
       );
-      console.log('Seeded default system settings');
+      console.log(`Migration: created default hospital (${defaultHospitalId}) for existing data`);
     }
 
+    // Every hospital needs a client_id (short code staff type at
+    // registration/login to identify their hospital) - backfill any that
+    // don't have one yet with NAME-derived code + a random suffix so it's
+    // unique even if two hospitals share the same first letters.
+    const { rows: hospitalsWithoutClientId } = await pool.query(
+      'SELECT id, name FROM hospitals WHERE client_id IS NULL'
+    );
+    for (const h of hospitalsWithoutClientId) {
+      const prefix = (h.name || 'HOSP').replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 4) || 'HOSP';
+      const suffix = Math.floor(1000 + Math.random() * 9000);
+      await pool.query('UPDATE hospitals SET client_id = $1 WHERE id = $2', [`${prefix}${suffix}`, h.id]);
+      console.log(`Migration: assigned client_id ${prefix}${suffix} to hospital ${h.name}`);
+    }
+
+    try {
+      await pool.query(`
+        ALTER TABLE hospitals ADD CONSTRAINT hospitals_client_id_unique UNIQUE (client_id)
+      `);
+    } catch (err) {
+      console.log('Could not add hospitals client_id unique constraint:', err.message);
+    }
+
+    for (const table of TENANT_TABLES) {
+      const { rowCount } = await pool.query(
+        `UPDATE ${table} SET hospital_id = $1 WHERE hospital_id IS NULL`,
+        [defaultHospitalId]
+      );
+      if (rowCount > 0) console.log(`Migration: backfilled ${rowCount} row(s) in ${table}`);
+    }
+
+    // TEMPORARY, until every controller explicitly passes hospital_id (the
+    // auth/JWT phase of this rework): default new inserts to the same
+    // hospital, so existing code keeps working during the transition instead
+    // of every INSERT statement failing on a NOT NULL column it doesn't know
+    // about yet. Remove this default once that phase lands - at that point a
+    // missing hospital_id should be a loud error, not a silent default.
+    for (const table of TENANT_TABLES) {
+      try {
+        await pool.query(`ALTER TABLE ${table} ALTER COLUMN hospital_id SET DEFAULT '${defaultHospitalId}'`);
+      } catch (err) {
+        console.log(`Could not set hospital_id default on ${table}:`, err.message);
+      }
+    }
+
+    // Once backfilled, every row has a hospital_id - safe to enforce NOT NULL.
+    // Wrapped per-table so one unexpected leftover NULL doesn't block startup;
+    // it'll just log and retry on the next boot instead of crashing the server.
+    for (const table of TENANT_TABLES) {
+      try {
+        await pool.query(`ALTER TABLE ${table} ALTER COLUMN hospital_id SET NOT NULL`);
+      } catch (err) {
+        console.log(`Could not enforce NOT NULL on ${table}.hospital_id yet:`, err.message);
+      }
+    }
+
+    // Only these three pricing models exist so far (Phase 3). Adding a new
+    // model later means adding it here AND teaching computeStayCharge()
+    // about it - the CHECK is a deliberate reminder, not busywork.
+    try {
+      await pool.query(`
+        ALTER TABLE system_settings DROP CONSTRAINT IF EXISTS system_settings_pricing_model_check
+      `);
+      await pool.query(`
+        ALTER TABLE system_settings ADD CONSTRAINT system_settings_pricing_model_check
+        CHECK (pricing_model IN ('tiered_flat_hourly', 'flat_daily', 'free'))
+      `);
+    } catch (err) {
+      console.log('Could not add pricing_model check constraint:', err.message);
+    }
+
+    // One settings row per hospital, not one global row - each hospital's
+    // pricing is independent. Enforced at the DB level so a bug can't ever
+    // create two rows for the same hospital and leave which one "wins"
+    // ambiguous.
+    try {
+      await pool.query(`
+        ALTER TABLE system_settings ADD CONSTRAINT system_settings_hospital_id_unique UNIQUE (hospital_id)
+      `);
+    } catch (err) {
+      console.log('Could not add system_settings hospital_id unique constraint:', err.message);
+    }
+
+    // Every hospital needs its own settings row - backfill any that don't
+    // have one yet (e.g. hospitals created directly in the DB before the
+    // SuperAdmin onboarding UI exists to do this automatically).
+    const { rows: hospitalsWithoutSettings } = await pool.query(`
+      SELECT h.id FROM hospitals h
+      LEFT JOIN system_settings s ON s.hospital_id = h.id
+      WHERE s.id IS NULL
+    `);
+    for (const { id: hospId } of hospitalsWithoutSettings) {
+      await pool.query(
+        'INSERT INTO system_settings (id, hospital_id, first_day_charge, hourly_charge_after_24hrs) VALUES ($1, $2, $3, $4)',
+        [uuidv4(), hospId, 2100.00, 130.00]
+      );
+      console.log(`Migration: seeded default settings for hospital ${hospId}`);
+    }
+
+    // ── Indexes on frequently-filtered/joined columns ────────────────────────
+    const indexes = [
+      ['idx_cabin_allocations_bodyid',  'cabin_allocations',  '"bodyId"'],
+      ['idx_cabin_allocations_cabinid', 'cabin_allocations',  '"cabinId"'],
+      ['idx_cabin_allocations_status',  'cabin_allocations',  'status'],
+      ['idx_billing_bodyid',            'billing',            '"bodyId"'],
+      ['idx_billing_status',            'billing',            'status'],
+      ['idx_body_releases_bodyid',      'body_releases',      '"bodyId"'],
+      ['idx_bodies_status',             'bodies',             'status'],
+      ['idx_bodies_billing_status',     'bodies',             'billing_status'],
+      ['idx_housekeeping_cabinid',      'housekeeping_tasks', '"cabinId"'],
+      ['idx_service_billing_bodyid',    'service_billing',    '"bodyId"'],
+      ['idx_service_billing_billingid', 'service_billing',    '"billingId"'],
+      ['idx_billing_services_billingid','billing_services',   '"billingId"'],
+      ['idx_billing_createdat',         'billing',            '"createdAt"'],
+      ['idx_cabin_allocations_admission','cabin_allocations',  '"admissionDateTime"'],
+      ...TENANT_TABLES.map(table => [`idx_${table}_hospitalid`, table, 'hospital_id']),
+    ];
+
+    for (const [name, table, column] of indexes) {
+      try {
+        await pool.query(`CREATE INDEX IF NOT EXISTS ${name} ON ${table} (${column})`);
+      } catch (err) {
+        console.log(`Index skip (${name}):`, err.message);
+      }
+    }
+
+    // ── Seed defaults ─────────────────────────────────────────────────────────
+    // (system_settings is now seeded per-hospital above, alongside the
+    // hospital_id unique constraint - superseded the old single global-row
+    // seed here, which never set hospital_id at all.)
     const { rows: cabinRows } = await pool.query('SELECT COUNT(*) AS count FROM cabins');
     if (parseInt(cabinRows[0].count) === 0) {
       for (let i = 1; i <= 10; i++) {
@@ -379,9 +580,11 @@ export async function initDatabase() {
       console.log('Seeded default Body Dressing service');
     }
 
+
     console.log('PostgreSQL database initialized successfully');
   } catch (error) {
     console.error('Failed to initialize database:', error);
     throw error;
   }
 }
+

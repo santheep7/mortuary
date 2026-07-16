@@ -1,33 +1,39 @@
-import { v4 as uuidv4 } from 'uuid';
 import { queryOne, runQuery } from '../config/db.js';
+import { compressImage } from '../config/imageCompress.js';
+import { getHospitalSettings } from '../config/pricing.js';
 
 export async function getBillingSettings(req, res) {
   try {
-    const settings = await queryOne('SELECT * FROM system_settings LIMIT 1');
-    if (!settings) {
-      return res.json({
-        mortuary_name: 'MOSC Medical College Mortuary',
-        first_day_charge: 2100.00,
-        hourly_charge_after_24hrs: 130.00,
-        updated_by: 'System',
-        updated_at: new Date().toISOString()
-      });
-    }
+    // SuperAdmin has no single hospital of their own - reading settings on
+    // their behalf must say which hospital's settings are wanted.
+    const hospitalId = req.hospitalId ?? req.query.hospitalId;
+    if (!hospitalId) return res.status(400).json({ error: 'hospitalId is required' });
+
+    const settings = await getHospitalSettings(hospitalId);
     res.json(settings);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
 export async function getMortuaryName(req, res) {
   try {
-    const settings = await queryOne('SELECT mortuary_name FROM system_settings LIMIT 1');
+    // Authenticated - shown in the post-login header/sidebar, scoped to the
+    // caller's own hospital. SuperAdmin has no single hospital (hospitalId
+    // is null), so falls back to whichever row comes first - they don't
+    // have one "home" hospital's branding to show.
+    const hospitalId = req.hospitalId ?? req.query.hospitalId;
+    const settings = hospitalId
+      ? await queryOne('SELECT mortuary_name FROM system_settings WHERE hospital_id = $1', [hospitalId])
+      : await queryOne('SELECT mortuary_name FROM system_settings LIMIT 1');
     if (!settings) {
       return res.json({ mortuary_name: 'MOSC Medical College Mortuary' });
     }
     res.json({ mortuary_name: settings.mortuary_name });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -39,26 +45,19 @@ export async function updateMortuaryName(req, res) {
       return res.status(400).json({ error: 'mortuary_name is required' });
 
     const cleanName = mortuary_name.trim();
+    const hospitalId = req.hospitalId ?? req.body.hospitalId;
+    if (!hospitalId) return res.status(400).json({ error: 'hospitalId is required' });
 
-    let settings = await queryOne('SELECT id FROM system_settings LIMIT 1');
-    const id = settings ? settings.id : uuidv4();
+    const settings = await getHospitalSettings(hospitalId);
+    await runQuery(
+      'UPDATE system_settings SET mortuary_name=$1, updated_by=$2, updated_at=NOW() WHERE id=$3',
+      [cleanName, updated_by || 'SuperAdmin', settings.id]
+    );
 
-    if (settings) {
-      await runQuery(
-        'UPDATE system_settings SET mortuary_name=$1, updated_by=$2, updated_at=NOW() WHERE id=$3',
-        [cleanName, updated_by || 'SuperAdmin', id]
-      );
-    } else {
-      await runQuery(
-        'INSERT INTO system_settings (id, mortuary_name, updated_by) VALUES ($1,$2,$3)',
-        [id, cleanName, updated_by || 'SuperAdmin']
-      );
-    }
-
-    const updatedSettings = await queryOne('SELECT mortuary_name FROM system_settings WHERE id = $1', [id]);
-    res.json({ message: 'Mortuary name updated successfully', mortuary_name: updatedSettings.mortuary_name });
+    res.json({ message: 'Mortuary name updated successfully', mortuary_name: cleanName });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -68,46 +67,63 @@ export async function uploadMortuaryLogo(req, res) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const logoUrl = `/uploads/${req.file.filename}`;
+    // Logo only ever renders small (sidebar icon) - no reason to store it at
+    // full camera/screenshot resolution.
+    await compressImage(req.file.path, 400);
+
+    const logoUrl = `/uploads/logos/${req.file.filename}`;
     const updated_by = req.body.updated_by || 'SuperAdmin';
+    const hospitalId = req.hospitalId ?? req.body.hospitalId;
+    if (!hospitalId) return res.status(400).json({ error: 'hospitalId is required' });
 
-    let settings = await queryOne('SELECT id FROM system_settings LIMIT 1');
-    const id = settings ? settings.id : uuidv4();
+    const settings = await getHospitalSettings(hospitalId);
+    await runQuery(
+      'UPDATE system_settings SET mortuary_logo=$1, updated_by=$2, updated_at=NOW() WHERE id=$3',
+      [logoUrl, updated_by, settings.id]
+    );
 
-    if (settings) {
-      await runQuery(
-        'UPDATE system_settings SET mortuary_logo=$1, updated_by=$2, updated_at=NOW() WHERE id=$3',
-        [logoUrl, updated_by, id]
-      );
-    } else {
-      await runQuery(
-        'INSERT INTO system_settings (id, mortuary_logo, updated_by) VALUES ($1,$2,$3)',
-        [id, logoUrl, updated_by]
-      );
-    }
-
-    const updatedSettings = await queryOne('SELECT mortuary_logo FROM system_settings WHERE id = $1', [id]);
-    res.json({ message: 'Logo uploaded successfully', mortuary_logo: updatedSettings.mortuary_logo });
+    res.json({ message: 'Logo uploaded successfully', mortuary_logo: logoUrl });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
 export async function getMortuaryLogo(req, res) {
   try {
-    const settings = await queryOne('SELECT mortuary_logo FROM system_settings LIMIT 1');
-    if (!settings || !settings.mortuary_logo) {
-      return res.json({ mortuary_logo: null });
+    // Authenticated - same reasoning as getMortuaryName above.
+    const hospitalId = req.hospitalId ?? req.query.hospitalId;
+    const settings = hospitalId
+      ? await queryOne('SELECT mortuary_logo FROM system_settings WHERE hospital_id = $1', [hospitalId])
+      : await queryOne('SELECT mortuary_logo FROM system_settings LIMIT 1');
+
+    if (settings?.mortuary_logo) {
+      return res.json({ mortuary_logo: settings.mortuary_logo });
     }
-    res.json({ mortuary_logo: settings.mortuary_logo });
+
+    // A hospital's logo is normally set once, at SuperAdmin onboarding
+    // (stored on hospitals.logo) - system_settings.mortuary_logo is only
+    // populated if someone later uses this Admin-facing "Upload Logo"
+    // action separately. Fall back to the hospital's own logo so a hospital
+    // isn't shown as logo-less just because nobody re-uploaded it here.
+    if (hospitalId) {
+      const hospital = await queryOne('SELECT logo FROM hospitals WHERE id = $1', [hospitalId]);
+      if (hospital?.logo) return res.json({ mortuary_logo: hospital.logo });
+    }
+
+    res.json({ mortuary_logo: null });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
 export async function updateBillingSettings(req, res) {
   try {
-    const { first_day_charge, hourly_charge_after_24hrs, updated_by } = req.body;
+    const {
+      first_day_charge, hourly_charge_after_24hrs, updated_by,
+      pricing_model, daily_rate, staff_discount_percent
+    } = req.body;
 
     if (first_day_charge === undefined || hourly_charge_after_24hrs === undefined)
       return res.status(400).json({ error: 'first_day_charge and hourly_charge_after_24hrs are required' });
@@ -118,24 +134,39 @@ export async function updateBillingSettings(req, res) {
     if (isNaN(firstDay) || isNaN(hourly) || firstDay < 0 || hourly < 0)
       return res.status(400).json({ error: 'Charges must be non-negative numbers' });
 
-    let settings = await queryOne('SELECT id FROM system_settings LIMIT 1');
-    const id = settings ? settings.id : uuidv4();
+    const hospitalId = req.hospitalId ?? req.body.hospitalId;
+    if (!hospitalId) return res.status(400).json({ error: 'hospitalId is required' });
 
-    if (settings) {
-      await runQuery(
-        'UPDATE system_settings SET first_day_charge=$1, hourly_charge_after_24hrs=$2, updated_by=$3, updated_at=NOW() WHERE id=$4',
-        [firstDay, hourly, updated_by || 'Admin', id]
-      );
-    } else {
-      await runQuery(
-        'INSERT INTO system_settings (id, first_day_charge, hourly_charge_after_24hrs, updated_by) VALUES ($1,$2,$3,$4)',
-        [id, firstDay, hourly, updated_by || 'Admin']
-      );
-    }
+    // Pricing-model fields are optional here so existing frontend calls that
+    // only send first_day_charge/hourly_charge_after_24hrs don't accidentally
+    // reset a hospital's model/discount back to defaults.
+    const existing = await getHospitalSettings(hospitalId);
 
-    const updatedSettings = await queryOne('SELECT * FROM system_settings WHERE id = $1', [id]);
+    const resolvedModel = pricing_model ?? existing.pricing_model;
+    if (!['tiered_flat_hourly', 'flat_daily', 'free'].includes(resolvedModel))
+      return res.status(400).json({ error: 'Invalid pricing_model' });
+
+    const resolvedDailyRate = daily_rate !== undefined ? parseFloat(daily_rate) : Number(existing.daily_rate);
+    if (isNaN(resolvedDailyRate) || resolvedDailyRate < 0)
+      return res.status(400).json({ error: 'daily_rate must be a non-negative number' });
+
+    const resolvedStaffDiscount = staff_discount_percent !== undefined
+      ? parseFloat(staff_discount_percent) : Number(existing.staff_discount_percent);
+    if (isNaN(resolvedStaffDiscount) || resolvedStaffDiscount < 0 || resolvedStaffDiscount > 100)
+      return res.status(400).json({ error: 'staff_discount_percent must be between 0 and 100' });
+
+    await runQuery(
+      `UPDATE system_settings
+       SET first_day_charge=$1, hourly_charge_after_24hrs=$2, updated_by=$3, updated_at=NOW(),
+           pricing_model=$4, daily_rate=$5, staff_discount_percent=$6
+       WHERE id=$7`,
+      [firstDay, hourly, updated_by || 'Admin', resolvedModel, resolvedDailyRate, resolvedStaffDiscount, existing.id]
+    );
+
+    const updatedSettings = await queryOne('SELECT * FROM system_settings WHERE id = $1', [existing.id]);
     res.json({ message: 'Settings updated successfully', settings: updatedSettings });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }

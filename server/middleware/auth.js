@@ -1,0 +1,47 @@
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_EXPIRY = '8h';
+
+export function signToken(payload) {
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRY });
+}
+
+// Verifies the Bearer token or cookie and attaches { id, role, hospitalId } to req.user.
+// Rejects with 401 if missing or invalid — this is the real check that
+// replaces trusting a client-supplied x-admin-role/x-user-role header.
+//
+// req.hospitalId is also set directly (same value as req.user.hospitalId) so
+// controllers can scope queries without reaching into req.user each time.
+// It is null for SuperAdmin, who isn't scoped to a single hospital — query
+// helpers should treat null as "no hospital filter" (sees/manages all).
+export function authenticate(req, res, next) {
+  // Try to get token from Authorization header first (for backward compatibility)
+  const header = req.headers['authorization'] || '';
+  let token = header.startsWith('Bearer ') ? header.slice(7) : null;
+
+  // If not in header, try to get from cookie
+  if (!token && req.cookies && req.cookies.token) {
+    token = req.cookies.token;
+  }
+
+  if (!token) return res.status(401).json({ message: 'Authentication required' });
+
+  try {
+    req.user = jwt.verify(token, JWT_SECRET);
+    req.hospitalId = req.user.hospitalId ?? null;
+    next();
+  } catch (error) {
+    return res.status(401).json({ message: 'Invalid or expired session' });
+  }
+}
+
+// Use after authenticate. Rejects with 403 if req.user.role isn't in allowedRoles.
+export function authorize(...allowedRoles) {
+  return (req, res, next) => {
+    if (!req.user || !allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ message: 'You do not have permission to perform this action' });
+    }
+    next();
+  };
+}

@@ -1,16 +1,19 @@
-import { queryAll, queryOne, runQuery } from '../config/db.js';
+import { queryAll, queryOne, runQuery, hospitalClause } from '../config/db.js';
 
 export async function getTasks(req, res) {
   try {
+    const hc = hospitalClause(req.hospitalId, 1, 'ht.hospital_id');
     const tasks = await queryAll(`
       SELECT ht.*, c."cabinNumber"
       FROM housekeeping_tasks ht
       JOIN cabins c ON ht."cabinId" = c.id
+      WHERE 1=1${hc.sql}
       ORDER BY ht."createdAt" DESC
-    `);
+    `, hc.params);
     res.json(tasks);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -20,13 +23,16 @@ export async function assignTask(req, res) {
     if (!taskId || !staffName)
       return res.status(400).json({ error: 'taskId and staffName are required' });
 
-    await runQuery(
-      "UPDATE housekeeping_tasks SET \"assignedTo\"=$1, status='IN_PROGRESS' WHERE id=$2",
-      [staffName, taskId]
+    const hc = hospitalClause(req.hospitalId, 3);
+    const result = await runQuery(
+      `UPDATE housekeeping_tasks SET "assignedTo"=$1, status='IN_PROGRESS' WHERE id=$2${hc.sql}`,
+      [staffName, taskId, ...hc.params]
     );
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Task not found' });
     res.json({ message: 'Task assigned successfully' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -35,10 +41,13 @@ export async function completeTask(req, res) {
     const { taskId } = req.body;
     if (!taskId) return res.status(400).json({ error: 'taskId is required' });
 
-    await runQuery("UPDATE housekeeping_tasks SET status='COMPLETED' WHERE id=$1", [taskId]);
+    const hc = hospitalClause(req.hospitalId, 2);
+    const result = await runQuery(`UPDATE housekeeping_tasks SET status='COMPLETED' WHERE id=$1${hc.sql}`, [taskId, ...hc.params]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Task not found' });
     res.json({ message: 'Task marked as completed' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
 
@@ -47,7 +56,8 @@ export async function verifyTask(req, res) {
     const { taskId } = req.body;
     if (!taskId) return res.status(400).json({ error: 'taskId is required' });
 
-    const task = await queryOne('SELECT "cabinId" FROM housekeeping_tasks WHERE id=$1', [taskId]);
+    const hc = hospitalClause(req.hospitalId, 2);
+    const task = await queryOne(`SELECT "cabinId" FROM housekeeping_tasks WHERE id=$1${hc.sql}`, [taskId, ...hc.params]);
     if (!task) return res.status(404).json({ error: 'Task not found' });
 
     await runQuery("UPDATE housekeeping_tasks SET status='VERIFIED' WHERE id=$1", [taskId]);
@@ -55,6 +65,7 @@ export async function verifyTask(req, res) {
 
     res.json({ message: 'Task verified and cabin is now Available' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }

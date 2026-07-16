@@ -11,8 +11,10 @@ import {
 } from 'lucide-react';
 
 import { API_BASE } from '../config.js';
+import { useMortuaryName } from '../context/MortuaryNameContext.jsx';
 
 function Dashboard() {
+  const { mortuaryName } = useMortuaryName();
   const [stats, setStats] = useState(null);
   const [cabins, setCabins] = useState([]);
   const [allocations, setAllocations] = useState([]);
@@ -259,7 +261,7 @@ function Dashboard() {
             Mortuary Operations Dashboard
           </h1>
           <p className="text-sm text-slate-500">
-            MOSC Medical College Command Center • Local Hospital Logistics & Stay Controls
+            {mortuaryName} • Local Hospital Logistics & Stay Controls
           </p>
         </div>
         <button 
@@ -271,7 +273,7 @@ function Dashboard() {
       </div>
 
       {/* SECTION 1: Executive KPI Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-4">
         {[
           { label: 'Total Bodies', val: stats?.totalBodies || 0, icon: Users, color: 'text-blue-600 bg-blue-50 border-blue-100' },
           { label: 'Active Stay', val: computedMetrics.occupied, icon: Bed, color: 'text-red-600 bg-red-50 border-red-100' },
@@ -295,10 +297,10 @@ function Dashboard() {
       </div>
 
       {/* Primary Layout Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+
         {/* Left Column: Live Matrix Grid (occupies 2 cols on desktop) */}
-        <div className="lg:col-span-2 space-y-8">
+        <div className="xl:col-span-2 space-y-8">
           
           {/* SECTION 2: Live Cabin Status Matrix */}
           <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
