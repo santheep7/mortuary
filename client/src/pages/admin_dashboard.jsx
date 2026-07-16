@@ -14,7 +14,7 @@ import { API_BASE } from '../config.js';
 import { useMortuaryName } from '../context/MortuaryNameContext.jsx';
 
 function AdminDashboard() {
-  const { mortuaryName } = useMortuaryName();
+  const { mortuaryName, mortuaryLogo } = useMortuaryName();
   const [stats, setStats] = useState(null);
   const [cabins, setCabins] = useState([]);
   const [allocations, setAllocations] = useState([]);
@@ -301,16 +301,25 @@ function AdminDashboard() {
       
       {/* Executive Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-bold text-blue-600 tracking-wider uppercase bg-blue-50 px-2.5 py-1 rounded-full w-fit mb-1.5">
-            <Activity size={12} className="animate-pulse" /> Admin Operations Control Center
+        <div className="flex items-center gap-4">
+          {mortuaryLogo && (
+            <img
+              src={mortuaryLogo}
+              alt={mortuaryName ? `${mortuaryName} logo` : 'Mortuary logo'}
+              className="h-12 w-12 object-contain rounded-lg border border-slate-200/80 bg-white p-1"
+            />
+          )}
+          <div>
+            <div className="flex items-center gap-2 text-xs font-bold text-blue-600 tracking-wider uppercase bg-blue-50 px-2.5 py-1 rounded-full w-fit mb-1.5">
+              <Activity size={12} className="animate-pulse" /> Admin Operations Control Center
+            </div>
+            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+              Admin Dashboard
+            </h1>
+            <p className="text-sm text-slate-500">
+              {mortuaryName} • System configuration and live resource tracking
+            </p>
           </div>
-          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
-            Admin Dashboard
-          </h1>
-          <p className="text-sm text-slate-500">
-            {mortuaryName} • System configuration and live resource tracking
-          </p>
         </div>
         <button 
           onClick={fetchDashboardData}
