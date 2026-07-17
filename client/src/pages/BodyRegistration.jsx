@@ -32,6 +32,9 @@ const dummyPatients = [
 
 function BodyRegistration() {
   const [bodies, setBodies] = useState([]);
+  const [totalBodies, setTotalBodies] = useState(0);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
   const [showForm, setShowForm] = useState(true);
   const [viewMode, setViewMode] = useState('form'); // 'form' or 'list'
   const [searchQuery, setSearchQuery] = useState('');
@@ -79,9 +82,23 @@ function BodyRegistration() {
   const [nocUploading, setNocUploading] = useState(false);
   const nocInputRef = useRef(null);
 
+  // A new search/type filter shouldn't stay on whatever page the previous
+  // query left off on.
   useEffect(() => {
-    fetchBodies();
-    
+    setPage(1);
+  }, [searchQuery, filterType]);
+
+  // Debounced so typing doesn't fire a request per keystroke; filter/page
+  // changes fetch immediately.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchBodies();
+    }, searchQuery ? 400 : 0);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, filterType, page]);
+
+  useEffect(() => {
     // Check if redirected from Patient List with data
     const pendingData = localStorage.getItem('pendingBodyRegistration');
     if (pendingData) {
@@ -181,11 +198,12 @@ function BodyRegistration() {
 
   const fetchBodies = async () => {
     try {
-      const url = filterType
-        ? `${API_BASE}/bodies?bodyType=${filterType}`
-        : `${API_BASE}/bodies`;
-      const response = await axios.get(url);
-      setBodies(response.data);
+      const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) });
+      if (filterType) params.set('bodyType', filterType);
+      if (searchQuery) params.set('search', searchQuery);
+      const response = await axios.get(`${API_BASE}/bodies?${params.toString()}`);
+      setBodies(response.data.data);
+      setTotalBodies(response.data.total);
     } catch (error) {
       console.error('Error fetching bodies:', error);
     }
@@ -394,12 +412,7 @@ function BodyRegistration() {
     }
   };
 
-  const filteredBodies = bodies.filter(body =>
-    !searchQuery ||
-    body.bodyNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    body.patientName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    body.hospitalNumber?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const totalPages = Math.max(1, Math.ceil(totalBodies / PAGE_SIZE));
 
   return (
     <div className="space-y-6">
@@ -472,8 +485,8 @@ function BodyRegistration() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredBodies.length > 0 ? (
-                    filteredBodies.map((body) => (
+                  {bodies.length > 0 ? (
+                    bodies.map((body) => (
                       <tr key={body.id} className="table-row">
                         <td className="px-6 py-4 text-sm font-medium text-blue-600">{body.bodyNumber}</td>
                         <td className="px-6 py-4 text-sm text-gray-700">{body.patientName || 'N/A'}</td>
@@ -544,6 +557,29 @@ function BodyRegistration() {
                 </tbody>
               </table>
             </div>
+            {totalBodies > 0 && (
+              <div className="flex items-center justify-between px-6 py-3 border-t border-gray-100">
+                <p className="text-sm text-gray-500">
+                  Page {page} of {totalPages} &middot; {totalBodies} total
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page <= 1}
+                    className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page >= totalPages}
+                    className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </>
       ) : (

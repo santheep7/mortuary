@@ -13,7 +13,7 @@ export async function getBodyTypes(req, res) {
 
 export async function getBodies(req, res) {
   try {
-    const { status, bodyType, search } = req.query;
+    const { status, bodyType, search, page, limit } = req.query;
     // LEFT JOIN LATERAL fetches each body's latest allocation in the same
     // query instead of one extra round-trip per body (was O(n) queries).
     // Columns list is deliberately explicit, not `b.*` - the list view (and
@@ -56,8 +56,31 @@ export async function getBodies(req, res) {
     }
     const hc = hospitalClause(req.hospitalId, idx, 'b.hospital_id');
     query += hc.sql; params.push(...hc.params);
-    query += ' ORDER BY b."createdAt" DESC';
 
+    // Pagination is opt-in via ?page=&limit= - existing callers that don't
+    // pass them (Billing, CabinAllocation, BodyRelease, housekeeping) keep
+    // getting the full unpaginated array exactly as before. Only the body
+    // registry list view needs paging as historical records grow past a
+    // single screenful; nothing else on this endpoint's other consumers
+    // wants a partial list.
+    if (page && limit) {
+      const countQuery = query.replace(
+        /SELECT[\s\S]*?FROM bodies b/,
+        'SELECT COUNT(*)::int AS count FROM bodies b'
+      );
+      const countResult = await queryOne(countQuery, params);
+      const total = countResult?.count || 0;
+
+      const limitNum = Math.max(1, parseInt(limit, 10) || 50);
+      const pageNum = Math.max(1, parseInt(page, 10) || 1);
+      const offset = (pageNum - 1) * limitNum;
+
+      query += ` ORDER BY b."createdAt" DESC LIMIT $${idx + hc.params.length} OFFSET $${idx + hc.params.length + 1}`;
+      const bodies = await queryAll(query, [...params, limitNum, offset]);
+      return res.json({ data: bodies, total, page: pageNum, limit: limitNum });
+    }
+
+    query += ' ORDER BY b."createdAt" DESC';
     const bodies = await queryAll(query, params);
     res.json(bodies);
   } catch (error) {
