@@ -1,0 +1,42 @@
+# Local dev / eventual production convenience - NOT wired into the actual
+# deploy yet. Plan: deploy plain (Node + Postgres directly on the Hetzner
+# box, no Docker) first, prove it's stable, then cut over to this
+# deliberately once the basics are boring and working.
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      PG_HOST: db
+      PG_PORT: 5432
+      PG_USER: postgres
+      PG_PASSWORD: postgres
+      PG_DATABASE: mortuary
+      JWT_SECRET: dev-only-secret-change-in-real-deployment
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - uploads:/app/server/uploads
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: mortuary
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
+  uploads:
