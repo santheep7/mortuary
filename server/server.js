@@ -86,6 +86,23 @@ app.get('/api/hospitals/by-admin-username/:username', getHospitalByAdminUsername
 app.get('/api/dashboard/stats', authenticate, STAFF, getDashboardStats);
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
+// ── Serve the built client (production only) ─────────────────────────────────
+// In dev, Vite's own dev server handles the client on its own port with hot
+// reload - this block is only for a real deployment, where nothing else is
+// running to serve it. Combining client+API into one process keeps the
+// eventual deploy to one box simple: one thing to build, one thing to run.
+if (process.env.NODE_ENV === 'production') {
+  const clientDist = path.join(__dirname, '..', 'client', 'dist');
+  app.use(express.static(clientDist));
+  // SPA fallback: any GET that isn't /api or /uploads should still serve
+  // index.html so React Router can take over client-side (e.g. a hard
+  // refresh on /dashboard/body-registration would otherwise 404, since
+  // that path only exists inside the React app, not as a real file).
+  app.get(/^(?!\/api|\/uploads).*/, (req, res) => {
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+}
+
 // ── Error handling ───────────────────────────────────────────────────────────
 // Final safety net: anything that reaches here would otherwise be Express's
 // default HTML/stack-trace error page (or, for stream-based middleware like
