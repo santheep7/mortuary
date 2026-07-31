@@ -460,7 +460,7 @@ function SuperAdminDashboard() {
       {/* Add Hospital Modal */}
       {showAddHospitalModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="backdrop-blur-md bg-white/5 border border-white/20 rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
+          <div className="bg-white border border-slate-200 rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
             <div className="flex items-start justify-between gap-3 mb-4">
               <h3 className="text-lg font-bold text-slate-900">Onboard New Hospital</h3>
               <button
