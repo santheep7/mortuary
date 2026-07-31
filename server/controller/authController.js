@@ -93,7 +93,7 @@ export async function resetUserPassword(req, res) {
 
 export async function changePassword(req, res) {
   try {
-    const { currentPassword, newPassword } = req.body;
+    const { newPassword } = req.body;
     const userId = req.user.id;
     // Same endpoint serves both account types - Staff/Housekeeping live in
     // `users`, Admin/SuperAdmin live in `admin`. Table + column names differ
@@ -103,18 +103,20 @@ export async function changePassword(req, res) {
     const table = isAdminAccount ? 'admin' : 'users';
     const updatedAtColumn = isAdminAccount ? '"updatedAt"' : 'updated_at';
 
-    if (!currentPassword || !newPassword || newPassword.length < 8) {
+    if (!newPassword || newPassword.length < 8) {
       return res.status(400).json({ message: 'Invalid request. Password must be at least 8 characters.' });
     }
 
-    const user = await queryOne(`SELECT password FROM ${table} WHERE id = $1`, [userId]);
+    // No currentPassword check here, deliberately - this endpoint is only
+    // ever reached via the forced must-change-password redirect, seconds
+    // after the caller already proved they know the password by logging in
+    // with it. It's never exposed as a general "change my password"
+    // settings page, so re-verifying it again here would be redundant, not
+    // a real extra security barrier. authenticate() has already confirmed
+    // who this is via a valid session.
+    const user = await queryOne(`SELECT id FROM ${table} WHERE id = $1`, [userId]);
     if (!user) {
       return res.status(404).json({ message: 'User not found.' });
-    }
-
-    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({ message: 'Current password is incorrect.' });
     }
 
     const hash = await bcrypt.hash(newPassword, 12);

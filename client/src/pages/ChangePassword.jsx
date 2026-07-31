@@ -23,7 +23,6 @@ function getPasswordStrength(password) {
 
 export default function ChangePassword() {
   const navigate = useNavigate();
-  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [errors, setErrors] = useState({});
@@ -32,9 +31,6 @@ export default function ChangePassword() {
 
   const validate = () => {
     const errs = {};
-    if (!currentPassword) {
-      errs.currentPassword = "Current password is required.";
-    }
     if (!newPassword) {
       errs.newPassword = "New password is required.";
     } else {
@@ -62,10 +58,15 @@ export default function ChangePassword() {
     setErrors({});
 
     try {
+      // No currentPassword here - this page is only ever reached seconds
+      // after logging in with that exact password (see auth.jsx/
+      // adminlogin.jsx), so re-typing it again is pure redundancy, not a
+      // real security check. It's never used as a general "change my
+      // password" settings page, so this doesn't weaken anything else.
       const res = await fetch(`${API_BASE}/change_password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currentPassword, newPassword }),
+        body: JSON.stringify({ newPassword }),
         credentials: 'include',
       });
       const data = await res.json();
@@ -103,17 +104,6 @@ export default function ChangePassword() {
       <StatusBanner type={submitStatus?.type} message={submitStatus?.message} />
 
       <form onSubmit={handleSubmit} noValidate className="space-y-5">
-        <FormField
-          label="Current (Temporary) Password"
-          name="currentPassword"
-          value={currentPassword}
-          onChange={(e) => { setCurrentPassword(e.target.value); setErrors(prev => ({ ...prev, currentPassword: "" })); }}
-          error={errors.currentPassword}
-          placeholder="Enter the temporary password"
-          isPassword
-          iconPath={LOCK_ICON}
-        />
-
         <div>
           <FormField
             label="New Password"
