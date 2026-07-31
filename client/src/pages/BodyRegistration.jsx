@@ -5,6 +5,15 @@ import MLCRegistrationPrint from './MLCRegistrationPrint';
 
 import { API_BASE } from '../config.js';
 
+const deriveTimeParts = (raw) => {
+  if (!raw || !/^\d{2}:\d{2}$/.test(raw)) return { hour12: '', minute: '', ampm: 'AM' };
+  const [h, m] = raw.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  let hour12 = h % 12;
+  if (hour12 === 0) hour12 = 12;
+  return { hour12: String(hour12).padStart(2, '0'), minute: String(m).padStart(2, '0'), ampm };
+};
+
 // Format phone number with hyphens: XXX-XXX-XXXX
 const formatPhoneNumber = (value) => {
   const cleaned = value.replace(/\D/g, '');
@@ -78,6 +87,12 @@ function BodyRegistration() {
     freezerRequired: true
   });
 
+  // Kept independent of formData.timeOfDeath (derived only) so a partial
+  // selection (e.g. hour picked, minute not yet) survives re-render instead
+  // of being wiped back to blank on every keystroke - see
+  // handleTimeOfDeathPartChange.
+  const [timeParts, setTimeParts] = useState({ hour12: '', minute: '', ampm: 'AM' });
+
   const [nocFile, setNocFile] = useState(null);
   const [nocUploading, setNocUploading] = useState(false);
   const nocInputRef = useRef(null);
@@ -133,6 +148,7 @@ function BodyRegistration() {
         freezerRequired: true
       };
       setFormData(newFormData);
+      setTimeParts(deriveTimeParts(newFormData.timeOfDeath));
       setLinkedPatient(patient);
       setHospitalSearch(patient.hospitalNumber || '');
       setShowForm(true);
@@ -173,6 +189,7 @@ function BodyRegistration() {
       reasonOfDeath: patient.reasonOfDeath,
       bodyType: patient.bodyType
     });
+    setTimeParts(deriveTimeParts(patient.timeOfDeath));
     setLinkedPatient(patient);
     setHospitalSearch(patient.hospitalNumber);
     setShowHospitalSuggestions(false);
@@ -194,6 +211,7 @@ function BodyRegistration() {
       reasonOfDeath: '',
       bodyType: 'Non-MLC'
     });
+    setTimeParts({ hour12: '', minute: '', ampm: 'AM' });
   };
 
   const fetchBodies = async () => {
@@ -226,25 +244,19 @@ function BodyRegistration() {
   // OS/browser locale settings, with no way to force 12-hour display via
   // plain HTML - so AM/PM could go missing depending on whoever's laptop
   // this runs on.
-  const getTimeOfDeathParts = () => {
-    const raw = formData.timeOfDeath;
-    if (!raw || !/^\d{2}:\d{2}$/.test(raw)) return { hour12: '', minute: '', ampm: 'AM' };
-    const [h, m] = raw.split(':').map(Number);
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    let hour12 = h % 12;
-    if (hour12 === 0) hour12 = 12;
-    return { hour12: String(hour12).padStart(2, '0'), minute: String(m).padStart(2, '0'), ampm };
-  };
-
   const handleTimeOfDeathPartChange = (part, value) => {
-    const current = { ...getTimeOfDeathParts(), [part]: value };
-    if (!current.hour12 || current.minute === '') {
+    const updated = { ...timeParts, [part]: value };
+    setTimeParts(updated);
+    if (!updated.hour12 || updated.minute === '') {
+      // Hour and minute both required before we have a valid 24-hour value
+      // to store, but timeParts (not formData) keeps the partial selection
+      // visible in the selects while the user is still picking.
       setFormData((prev) => ({ ...prev, timeOfDeath: '' }));
       return;
     }
-    let hour24 = parseInt(current.hour12, 10) % 12;
-    if (current.ampm === 'PM') hour24 += 12;
-    setFormData((prev) => ({ ...prev, timeOfDeath: `${String(hour24).padStart(2, '0')}:${current.minute}` }));
+    let hour24 = parseInt(updated.hour12, 10) % 12;
+    if (updated.ampm === 'PM') hour24 += 12;
+    setFormData((prev) => ({ ...prev, timeOfDeath: `${String(hour24).padStart(2, '0')}:${updated.minute}` }));
   };
 
   const handleNocUpload = async (e) => {
@@ -361,6 +373,7 @@ function BodyRegistration() {
       nocCertificateUrl: '',
       freezerRequired: true
     });
+    setTimeParts({ hour12: '', minute: '', ampm: 'AM' });
     setLinkedPatient(null);
     setHospitalSearch('');
     setShowHospitalSuggestions(false);
@@ -409,6 +422,7 @@ function BodyRegistration() {
         nocCertificateUrl: body.nocCertificateUrl || '',
         freezerRequired: body.freezerRequired !== 0
       });
+      setTimeParts(deriveTimeParts(body.timeOfDeath || ''));
       setNocFile(null);
       setSelectedBody(body);
       setLinkedPatient(null);
@@ -952,7 +966,7 @@ function BodyRegistration() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Time of Death</label>
                     <div className="grid grid-cols-3 gap-2">
                       <select
-                        value={getTimeOfDeathParts().hour12}
+                        value={timeParts.hour12}
                         onChange={(e) => handleTimeOfDeathPartChange('hour12', e.target.value)}
                         className="input-field"
                         aria-label="Hour"
@@ -963,7 +977,7 @@ function BodyRegistration() {
                         ))}
                       </select>
                       <select
-                        value={getTimeOfDeathParts().minute}
+                        value={timeParts.minute}
                         onChange={(e) => handleTimeOfDeathPartChange('minute', e.target.value)}
                         className="input-field"
                         aria-label="Minute"
@@ -974,7 +988,7 @@ function BodyRegistration() {
                         ))}
                       </select>
                       <select
-                        value={getTimeOfDeathParts().ampm}
+                        value={timeParts.ampm}
                         onChange={(e) => handleTimeOfDeathPartChange('ampm', e.target.value)}
                         className="input-field"
                         aria-label="AM or PM"
