@@ -42,7 +42,18 @@ process.on('uncaughtException', (err) => console.error('Uncaught exception (serv
 process.on('unhandledRejection', (err) => console.error('Unhandled rejection (server stayed up):', err));
 
 // ── Middleware ───────────────────────────────────────────────────────────────
-app.use(cors());
+// cors() with no options allows every origin on the internet to call this
+// API - harmless in dev (the client only ever reaches this server through
+// Vite's same-origin proxy, never a direct cross-origin browser request) and
+// in production (client + API are served from the same origin/process), but
+// not something to leave open by default on a system holding health records.
+// CLIENT_ORIGIN lets a real deployed frontend on its own domain be added
+// explicitly, rather than reopening this to everyone again.
+const allowedOrigins = (process.env.CLIENT_ORIGIN || 'http://localhost:3000').split(',');
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true,
+}));
 app.use(cookieParser());
 app.use(express.json());
 // Logos are branding, shown on the login/register page before anyone is

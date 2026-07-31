@@ -307,7 +307,7 @@ export default function Auth() {
           if (data.user.role === "House Keeping") {
             navigate("/dashboard/housekeeping");
           } else if (data.user.role === "M Staff") {
-            navigate("/dashboard/dashboard");
+            navigate("/dashboard/body-registration");
           }
         }
       } else {

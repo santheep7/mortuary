@@ -17,7 +17,6 @@ import {
   ClipboardCheck,
   Tag
 } from 'lucide-react';
-import Dashboard from './pages/Dashboard';
 import BodyRegistration from './pages/BodyRegistration';
 import PatientList from './pages/PatientList';
 import CabinAllocation from './pages/CabinAllocation';
@@ -30,8 +29,6 @@ import ServiceMaster from './pages/ServiceMaster';
 import Auth from './pages/auth';
 import ForgotPassword from './pages/forgot_password';
 import Dashboard_Base from './pages/dashboard_base';
-import HouseKeeping from './pages/housekeeping';
-import StaffHouseKeeping from './pages/staff_housekeeping';
 import AdminLogin from './pages/adminlogin';
 import SuperAdminLogin from './pages/superadminlogin';
 import AdminDashboard from './pages/admin_dashboard';
@@ -68,14 +65,11 @@ function App() {
                <Route path="superadmin-dashboard" element={<SuperAdminDashboard/>}/>
 
               <Route path="housekeeping" element={<HousekeepingDashboard/>}/>
-                  <Route path="housekeeping" element={<HouseKeeping/>}/>
-                  <Route path="dashboard" element={<Dashboard />} />
                   <Route path="patient-list" element={<PatientList />} />
                   <Route path="body-registration" element={<BodyRegistration />} />
                   <Route path="cabin-allocation" element={<CabinAllocation />} />
                   <Route path="billing" element={<Billing />} />
                   <Route path="body-release" element={<BodyRelease />} />
-                  <Route path="housekeeping" element={<HousekeepingDashboard />} />
                   <Route path="release-history" element={<ReleaseHistory />} />
               </Route>
           
