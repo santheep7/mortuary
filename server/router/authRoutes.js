@@ -16,6 +16,7 @@ import {
   resetUserPassword,
   adminResetPassword,
   changePassword,
+  resetOwnPassword,
   logout
 } from '../controller/authController.js';
 
@@ -29,6 +30,11 @@ router.post('/login',         loginUser);
 router.post('/logout',        logout);
 router.post('/forgot_password', requestPasswordReset);
 router.post('/change_password', authenticate, changePassword);
+
+// Voluntary password reset from an already-active session (e.g. Settings /
+// sidebar) - requires the current password, unlike change_password above
+// which only ever runs immediately after a forced-temp-password login.
+router.post('/reset_own_password', authenticate, resetOwnPassword);
 
 // Admin auth
 router.post('/admin/login',    loginAdmin);

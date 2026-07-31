@@ -134,6 +134,57 @@ export async function changePassword(req, res) {
   }
 }
 
+// ── Voluntary password reset (already logged in normally, from Settings) ───────
+// Unlike changePassword above, this one DOES require the current password -
+// it's reachable any time from an already-active session (not gated behind
+// must_change_password), so skipping that check here really would be a real
+// security gap: anyone who got hold of an unlocked session/cookie could
+// silently lock the real owner out. Same table-generalization as
+// changePassword, kept separate rather than merging the two - they answer
+// genuinely different questions ("prove you still know this account's
+// password" vs "you already just proved that at login a second ago").
+export async function resetOwnPassword(req, res) {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.user.id;
+    const isAdminAccount = req.user.role === 'Admin' || req.user.role === 'SuperAdmin';
+    const table = isAdminAccount ? 'admin' : 'users';
+    const updatedAtColumn = isAdminAccount ? '"updatedAt"' : 'updated_at';
+
+    if (!currentPassword || !newPassword || newPassword.length < 8) {
+      return res.status(400).json({ message: 'Invalid request. Password must be at least 8 characters.' });
+    }
+
+    const user = await queryOne(`SELECT password FROM ${table} WHERE id = $1`, [userId]);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isPasswordValid) {
+      // 403, not 401: a wrong current password is a business-logic rejection,
+      // not an expired/invalid session token. The global axios interceptor in
+      // main.jsx treats any 401 as "session expired" and force-logs the user
+      // out — using 401 here would kick an admin out of their own session
+      // just for mistyping their current password.
+      return res.status(403).json({ message: 'Current password is incorrect.' });
+    }
+
+    const hash = await bcrypt.hash(newPassword, 12);
+    await runQuery(
+      `UPDATE ${table}
+       SET password = $1, ${updatedAtColumn} = NOW()
+       WHERE id = $2`,
+      [hash, userId]
+    );
+
+    res.status(200).json({ message: 'Password reset successfully.' });
+  } catch (error) {
+    console.error('Reset own password error:', error);
+    res.status(500).json({ message: 'Server error. Please try again later.' });
+  }
+}
+
 // ── User registration ────────────────────────────────────────────────────────
 
 export async function registerUser(req, res) {

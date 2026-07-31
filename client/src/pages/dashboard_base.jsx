@@ -25,7 +25,8 @@ import {
   UserCheck,
   Menu,
   X,
-  Building2
+  Building2,
+  KeyRound
 } from 'lucide-react';
 
 export default function Dashboard_Base() {
@@ -76,6 +77,7 @@ export default function Dashboard_Base() {
       { path: '/dashboard/admin/service-master',     icon: Tag,              label: 'Service Master' },
       { path: '/dashboard/admin/billing-settings',   icon: Settings,         label: 'Billing Settings' },
       { path: '/dashboard/admin/reports',            icon: FileText,         label: 'Reports' },
+      { path: '/dashboard/admin/reset-password',     icon: KeyRound,         label: 'Reset Password' },
     ];
   }
 
