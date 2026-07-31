@@ -114,7 +114,8 @@ export default function Dashboard_Base() {
                   <div className="min-w-0">
                     {role === "SuperAdmin" ? (
                       <>
-                        {/* Hide mortuary name/label on SuperAdmin sidebar */}
+                        <h1 className="text-white font-bold text-lg truncate">SuperAdmin</h1>
+                        <p className="text-blue-200 text-xs">Control Center</p>
                       </>
                     ) : (
                       <>

@@ -75,12 +75,19 @@ export default function ChangePassword() {
           type: "success",
           message: "Password changed successfully! Redirecting you to sign in with your new password..."
         });
+        // Read role before clearing it - it decides which login page to send
+        // this account back to (Admin/SuperAdmin have their own login routes,
+        // Staff/House Keeping share the plain "/" login).
+        const role = localStorage.getItem('role');
+        const loginPath = role === 'Admin' ? '/admin-login'
+          : role === 'SuperAdmin' ? '/superadmin-login'
+          : '/';
         // Clear old token / localstorage to force clean login with new password
         localStorage.removeItem('role');
         localStorage.removeItem('username');
         localStorage.removeItem('admin');
         setTimeout(() => {
-          navigate("/");
+          navigate(loginPath);
         }, 3000);
       } else {
         setSubmitStatus({ type: "error", message: data.message || "Failed to update password." });
