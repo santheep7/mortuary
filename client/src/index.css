@@ -7,7 +7,15 @@
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  color-scheme: light dark;
+  /* This app has no built dark theme - declaring "light dark" here told the
+     browser it was safe to auto-apply native dark styling to unstyled form
+     controls (inputs, selects) when the OS/browser prefers dark. Every
+     input in the app sets its border color but not its background/text, so
+     that auto-dark styling made input boxes go near-black with barely
+     visible text, while the surrounding white cards/modals stayed correctly
+     light. Declaring light-only opts out of that entirely, at the root,
+     instead of patching every individual input's classes. */
+  color-scheme: light;
   color: #213547;
   background-color: #f8fafc;
 }

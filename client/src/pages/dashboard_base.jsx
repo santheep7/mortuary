@@ -1,7 +1,7 @@
 import { Outlet } from "react-router-dom";
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from "react-router-dom";
-import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, NavLink, Navigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { useMortuaryName } from '../context/MortuaryNameContext.jsx';
 import { getUploadUrl } from '../config.js';
@@ -70,12 +70,12 @@ export default function Dashboard_Base() {
   }
   else if (role === "Admin") {
     navItems = [
-      { path: '/dashboard/admin-dashboard', icon: LayoutDashboard, label: 'Admin Dashboard' },
-      { path: '/dashboard/user-approvals',  icon: UserCheck,        label: 'User Approvals' },
-      { path: '/dashboard/cabin-master',    icon: Settings,         label: 'Masters' },
-      { path: '/dashboard/service-master',  icon: Tag,              label: 'Service Master' },
-      { path: '/dashboard/billing-settings',icon: Settings,         label: 'Billing Settings' },
-      { path: '/dashboard/reports',         icon: FileText,         label: 'Reports' },
+      { path: '/dashboard/admin',                    icon: LayoutDashboard, label: 'Admin Dashboard' },
+      { path: '/dashboard/admin/user-approvals',     icon: UserCheck,        label: 'User Approvals' },
+      { path: '/dashboard/admin/cabin-master',       icon: Settings,         label: 'Masters' },
+      { path: '/dashboard/admin/service-master',     icon: Tag,              label: 'Service Master' },
+      { path: '/dashboard/admin/billing-settings',   icon: Settings,         label: 'Billing Settings' },
+      { path: '/dashboard/admin/reports',            icon: FileText,         label: 'Reports' },
     ];
   }
 
@@ -95,39 +95,43 @@ export default function Dashboard_Base() {
           bg-white border-r border-gray-200 transition-all duration-300 flex flex-col
           transform ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static`}>
 
-          {/* Logo */}
+          {/* Logo - links to this role's own dashboard home (always the
+              first entry in their own navItems), same basic expectation as
+              any real app: clicking the brand mark takes you home. */}
           <div className="h-16 flex items-center justify-between border-b border-gray-200 bg-blue-600 px-4">
-            {sidebarOpen ? (
-              <div className="text-center flex items-center gap-2">
-                {role === "SuperAdmin" ? (
+            <Link to={navItems[0]?.path || '/dashboard'} className="min-w-0">
+              {sidebarOpen ? (
+                <div className="text-center flex items-center gap-2">
+                  {role === "SuperAdmin" ? (
+                    <span className="text-white font-bold text-xl">M</span>
+                  ) : mortuaryLogo ? (
+                    <img src={getUploadUrl(mortuaryLogo)} alt="Logo" className="h-10 w-10 object-contain" />
+                  ) : (
+                    <span className="text-white font-bold text-xl">M</span>
+                  )}
+                  <div className="min-w-0">
+                    {role === "SuperAdmin" ? (
+                      <>
+                        {/* Hide mortuary name/label on SuperAdmin sidebar */}
+                      </>
+                    ) : (
+                      <>
+                        <h1 className="text-white font-bold text-lg truncate">{mortuaryName}</h1>
+                        <p className="text-blue-200 text-xs">Mortuary Management</p>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                role === "SuperAdmin" ? (
                   <span className="text-white font-bold text-xl">M</span>
                 ) : mortuaryLogo ? (
                   <img src={getUploadUrl(mortuaryLogo)} alt="Logo" className="h-10 w-10 object-contain" />
                 ) : (
                   <span className="text-white font-bold text-xl">M</span>
-                )}
-                <div className="min-w-0">
-                  {role === "SuperAdmin" ? (
-                    <>
-                      {/* Hide mortuary name/label on SuperAdmin sidebar */}
-                    </>
-                  ) : (
-                    <>
-                      <h1 className="text-white font-bold text-lg truncate">{mortuaryName}</h1>
-                      <p className="text-blue-200 text-xs">Mortuary Management</p>
-                    </>
-                  )}
-                </div>
-              </div>
-            ) : (
-              role === "SuperAdmin" ? (
-                <span className="text-white font-bold text-xl">M</span>
-              ) : mortuaryLogo ? (
-                <img src={getUploadUrl(mortuaryLogo)} alt="Logo" className="h-10 w-10 object-contain" />
-              ) : (
-                <span className="text-white font-bold text-xl">M</span>
-              )
-            )}
+                )
+              )}
+            </Link>
             <button
               onClick={() => setMobileOpen(false)}
               className="lg:hidden text-white/80 hover:text-white"

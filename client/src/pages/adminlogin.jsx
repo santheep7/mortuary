@@ -85,7 +85,7 @@ function AdminLogin() {
       // login cookie carries this admin's actual hospital_id, or the
       // dashboard would keep showing whatever hospital resolved first.
       await fetchMortuarySettings();
-      navigate("/dashboard/admin-dashboard");
+      navigate("/dashboard/admin");
     } catch (err) {
       setError("Server error");
     } finally {

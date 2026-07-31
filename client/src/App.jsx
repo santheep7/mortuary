@@ -56,7 +56,15 @@ function App() {
               <Route path="/superadmin-login" element={<SuperAdminLogin/>}/>
               <Route path="/user-guide" element={<UserGuide/>}/>
               <Route path="/dashboard" element={<Dashboard_Base/>}>
-               <Route path="admin-dashboard" element={<AdminDashboard/>}/>
+               {/* Admin-only pages, grouped under their own /admin namespace -
+                   distinct from Staff's and SuperAdmin's routes below, instead
+                   of everything sharing one flat, unlabeled /dashboard/* list. */}
+               <Route path="admin" element={<AdminDashboard/>}/>
+               <Route path="admin/user-approvals" element={<UserApprovals/>}/>
+               <Route path="admin/cabin-master" element={<CabinMaster/>}/>
+               <Route path="admin/service-master" element={<ServiceMaster/>}/>
+               <Route path="admin/billing-settings" element={<BillingSettings/>}/>
+               <Route path="admin/reports" element={<Reports/>}/>
                <Route path="superadmin-dashboard" element={<SuperAdminDashboard/>}/>
 
               <Route path="housekeeping" element={<HousekeepingDashboard/>}/>
@@ -68,12 +76,7 @@ function App() {
                   <Route path="billing" element={<Billing />} />
                   <Route path="body-release" element={<BodyRelease />} />
                   <Route path="housekeeping" element={<HousekeepingDashboard />} />
-                  <Route path="cabin-master" element={<CabinMaster />} />
-                  <Route path="service-master" element={<ServiceMaster />} />
-                  <Route path="billing-settings" element={<BillingSettings />} />
-                  <Route path="reports" element={<Reports />} />
                   <Route path="release-history" element={<ReleaseHistory />} />
-                  <Route path="user-approvals" element={<UserApprovals />} />
               </Route>
           
               <Route path="*" element={<Navigate to="/" replace />} />
