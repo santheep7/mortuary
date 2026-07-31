@@ -95,12 +95,19 @@ export async function changePassword(req, res) {
   try {
     const { currentPassword, newPassword } = req.body;
     const userId = req.user.id;
+    // Same endpoint serves both account types - Staff/Housekeeping live in
+    // `users`, Admin/SuperAdmin live in `admin`. Table + column names differ
+    // slightly (updated_at vs "updatedAt"), so branch once here rather than
+    // duplicating this whole handler for a second table.
+    const isAdminAccount = req.user.role === 'Admin' || req.user.role === 'SuperAdmin';
+    const table = isAdminAccount ? 'admin' : 'users';
+    const updatedAtColumn = isAdminAccount ? '"updatedAt"' : 'updated_at';
 
     if (!currentPassword || !newPassword || newPassword.length < 8) {
       return res.status(400).json({ message: 'Invalid request. Password must be at least 8 characters.' });
     }
 
-    const user = await queryOne('SELECT password FROM users WHERE id = $1', [userId]);
+    const user = await queryOne(`SELECT password FROM ${table} WHERE id = $1`, [userId]);
     if (!user) {
       return res.status(404).json({ message: 'User not found.' });
     }
@@ -112,8 +119,8 @@ export async function changePassword(req, res) {
 
     const hash = await bcrypt.hash(newPassword, 12);
     await runQuery(
-      `UPDATE users 
-       SET password = $1, must_change_password = FALSE, updated_at = NOW() 
+      `UPDATE ${table}
+       SET password = $1, must_change_password = FALSE, ${updatedAtColumn} = NOW()
        WHERE id = $2`,
       [hash, userId]
     );
@@ -222,7 +229,14 @@ export async function loginUser(req, res) {
       return res.status(403).json({ message: 'Your registration has been rejected. Please contact the admin for further assistance.' });
     }
 
-    const token = signToken({ id: user.id, role: user.department, hospitalId: user.hospital_id });
+    const mustChange = !!user.must_change_password;
+    // Baked into the token itself, not just checked here, so the auth
+    // middleware can enforce "nothing but change-password" on every
+    // subsequent request without an extra DB lookup per request. Safe to
+    // rely on a token issued at this exact moment - the change-password
+    // flow always forces a fresh login afterward, so there's no scenario
+    // where this flag needs to flip mid-session on the same token.
+    const token = signToken({ id: user.id, role: user.department, hospitalId: user.hospital_id, mustChangePassword: mustChange });
 
     res.cookie('token', token, {
       httpOnly: true,
@@ -230,8 +244,6 @@ export async function loginUser(req, res) {
       sameSite: 'strict',
       maxAge: 8 * 60 * 60 * 1000 // 8 hours
     });
-
-    const mustChange = !!user.must_change_password;
 
     return res.status(200).json({
       message: 'Login successful',
@@ -258,7 +270,8 @@ export async function loginAdmin(req, res) {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ message: 'Invalid password' });
 
-    const token = signToken({ id: user.id, role: user.role, hospitalId: user.hospital_id });
+    const mustChange = !!user.must_change_password;
+    const token = signToken({ id: user.id, role: user.role, hospitalId: user.hospital_id, mustChangePassword: mustChange });
 
     res.cookie('token', token, {
       httpOnly: true,
@@ -269,6 +282,7 @@ export async function loginAdmin(req, res) {
 
     res.json({
       message: 'Login successful',
+      mustChangePassword: mustChange,
       user: { id: user.id, username: user.username, role: user.role }
     });
   } catch (error) {
@@ -350,8 +364,10 @@ export async function addCoAdmin(req, res) {
     if (existing) return res.status(400).json({ message: 'Username already exists' });
 
     const hashedPassword = await bcrypt.hash(password, 12);
+    // Same reasoning as the SuperAdmin->Admin temp password: the inviting
+    // Admin shouldn't permanently know the co-admin's real password either.
     await runQuery(
-      'INSERT INTO admin (id, username, email, password, hospital_id) VALUES ($1, $2, $3, $4, $5)',
+      'INSERT INTO admin (id, username, email, password, hospital_id, must_change_password) VALUES ($1, $2, $3, $4, $5, true)',
       [uuidv4(), username, email || null, hashedPassword, req.hospitalId]
     );
 

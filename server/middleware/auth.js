@@ -30,6 +30,27 @@ export function authenticate(req, res, next) {
   try {
     req.user = jwt.verify(token, JWT_SECRET);
     req.hospitalId = req.user.hospitalId ?? null;
+
+    // A temporary password (set by SuperAdmin at onboarding, or by an Admin
+    // inviting a co-admin) must be changed before the account can do
+    // anything else - otherwise this is purely a client-side redirect that
+    // a direct API call could just ignore. mustChangePassword is baked into
+    // the token at login (see loginUser/loginAdmin), so this needs no extra
+    // DB lookup per request.
+    const ALLOWED_WHILE_MUST_CHANGE = [
+      '/api/change_password',
+      '/api/logout',
+      '/api/admin/logout',
+      '/api/superadmin/logout',
+    ];
+    const cleanPath = req.originalUrl.split('?')[0];
+    if (req.user.mustChangePassword && !ALLOWED_WHILE_MUST_CHANGE.includes(cleanPath)) {
+      return res.status(403).json({
+        message: 'You must change your password before continuing.',
+        mustChangePassword: true,
+      });
+    }
+
     next();
   } catch (error) {
     return res.status(401).json({ message: 'Invalid or expired session' });

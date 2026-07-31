@@ -91,8 +91,12 @@ export async function createHospital(req, res) {
 
     const adminId = uuidv4();
     const hashedPassword = await bcrypt.hash(adminPassword, 10);
+    // adminPassword here is a temporary password, not a permanent one -
+    // SuperAdmin is an external entity from the hospital's own perspective,
+    // so it shouldn't permanently know this Admin's real password. Forces
+    // a change on first login (see authenticate middleware + changePassword).
     await runQuery(
-      'INSERT INTO admin (id, username, email, password, hospital_id) VALUES ($1,$2,$3,$4,$5)',
+      'INSERT INTO admin (id, username, email, password, hospital_id, must_change_password) VALUES ($1,$2,$3,$4,$5,true)',
       [adminId, adminUsername, contact_email || null, hashedPassword, hospitalId]
     );
 

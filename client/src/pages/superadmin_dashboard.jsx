@@ -573,10 +573,13 @@ function SuperAdminDashboard() {
                     className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
                 </div>
                 <div>
-                  <label className="text-sm font-extrabold text-slate-800">Admin Password</label>
+                  <label className="text-sm font-extrabold text-slate-800">Temporary Password</label>
                   <input type="password" required minLength={8} value={newHospital.adminPassword}
                     onChange={(e) => setNewHospital({ ...newHospital, adminPassword: e.target.value })}
                     className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
+                  <p className="text-[10px] font-semibold text-slate-500 mt-1">
+                    The Admin will be required to set their own password on first login.
+                  </p>
                 </div>
               </div>
 

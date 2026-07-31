@@ -981,7 +981,7 @@ function AdminDashboard() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Temporary Password</label>
                 <input
                   type="password"
                   required
@@ -991,6 +991,9 @@ function AdminDashboard() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="Min 8 characters"
                 />
+                <p className="text-[10px] text-gray-500 mt-1">
+                  They'll be required to set their own password on first login.
+                </p>
               </div>
               <div className="flex gap-3">
                 <button
