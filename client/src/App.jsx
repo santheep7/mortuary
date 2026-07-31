@@ -34,6 +34,7 @@ import SuperAdminLogin from './pages/superadminlogin';
 import AdminDashboard from './pages/admin_dashboard';
 import SuperAdminDashboard from './pages/superadmin_dashboard';
 import BillingSettings from './pages/BillingSettings';
+import ResetOwnPassword from './pages/ResetOwnPassword';
 import ReleaseHistory from './pages/ReleaseHistory';
 import UserApprovals from './pages/UserApprovals';
 import UserGuide from './pages/UserGuide';
@@ -62,6 +63,7 @@ function App() {
                <Route path="admin/service-master" element={<ServiceMaster/>}/>
                <Route path="admin/billing-settings" element={<BillingSettings/>}/>
                <Route path="admin/reports" element={<Reports/>}/>
+               <Route path="admin/reset-password" element={<ResetOwnPassword/>}/>
                <Route path="superadmin-dashboard" element={<SuperAdminDashboard/>}/>
 
               <Route path="housekeeping" element={<HousekeepingDashboard/>}/>
