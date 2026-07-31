@@ -116,7 +116,7 @@ export default function Dashboard_Base() {
                       </>
                     ) : (
                       <>
-                        <h1 className="text-white font-bold text-lg truncate">{mortuaryName}</h1>
+                        <h1 className="text-white font-bold text-lg truncate" title={mortuaryName}>{mortuaryName}</h1>
                         <p className="text-blue-200 text-xs">Mortuary Management</p>
                       </>
                     )}

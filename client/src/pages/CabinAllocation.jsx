@@ -5,6 +5,12 @@ import { Bed, Search, Plus, X, CheckCircle, AlertTriangle, Clock, DollarSign } f
 import { API_BASE } from '../config.js';
 
 function CabinAllocation() {
+  // Advance amount is an Admin-set policy value, not something Staff should
+  // be able to change on the fly during allocation - Staff can see it, not
+  // edit it.
+  const role = localStorage.getItem('role');
+  const canEditAdvance = role === 'Admin' || role === 'SuperAdmin';
+
   const [cabins, setCabins] = useState([]);
   const [bodies, setBodies] = useState([]);
   const [allocations, setAllocations] = useState([]);
@@ -377,16 +383,20 @@ function CabinAllocation() {
                 />
               </div>
 
-              {/* Advance Collection */}
+              {/* Advance Collection - Admin-set policy value, Staff can view
+                  but not change it during allocation. */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Advance Collection</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Advance Collection {!canEditAdvance && <span className="text-xs text-gray-400 font-normal">(set by Admin)</span>}
+                </label>
                 <div className="relative">
 
                   <input
                     type="number"
                     value={allocationData.advanceAmount}
-                    onChange={(e) => setAllocationData({ ...allocationData, advanceAmount: parseFloat(e.target.value) || 0 })}
-                    className="input-field pl-7"
+                    onChange={(e) => canEditAdvance && setAllocationData({ ...allocationData, advanceAmount: parseFloat(e.target.value) || 0 })}
+                    readOnly={!canEditAdvance}
+                    className={`input-field pl-7 ${!canEditAdvance ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}
                     min="0"
                     step="0.01"
                   />

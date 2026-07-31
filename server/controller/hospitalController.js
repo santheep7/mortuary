@@ -169,7 +169,11 @@ export async function getHospitalByEmployeeId(req, res) {
     const { employeeId } = req.params;
     if (!employeeId) return res.status(400).json({ error: 'Employee ID is required' });
 
-    const user = await queryOne('SELECT hospital_id FROM users WHERE employee_id = $1', [employeeId.trim()]);
+    // Case-insensitive, matching loginUser's own lookup - the frontend no
+    // longer force-uppercases what's typed here (that was a bad login UX,
+    // now removed), so this has to tolerate whatever case the user actually
+    // typed, not just whatever case happens to be stored.
+    const user = await queryOne('SELECT hospital_id FROM users WHERE employee_id ILIKE $1', [employeeId.trim()]);
     if (!user) return res.status(404).json({ error: 'No account found for this Employee ID' });
 
     const hospital = await queryOne('SELECT name, logo FROM hospitals WHERE id = $1', [user.hospital_id]);

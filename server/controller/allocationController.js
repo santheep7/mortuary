@@ -36,7 +36,14 @@ export async function createAllocation(req, res) {
     const minimumAdvance = getMinimumAdvance(settings);
     const firstDayCharge = minimumAdvance; // used below only to seed the allocation's stored rate
 
-    const parsedAdvance = parseFloat(advanceAmount) || 0;
+    // Advance amount is an Admin-set policy value, not something Staff gets
+    // to change - the frontend already locks this field for Staff, but that
+    // alone doesn't stop a direct API call, so enforce it here too. Only
+    // Admin/SuperAdmin can override the default; everyone else's request
+    // silently uses the hospital's configured minimum regardless of what
+    // they sent.
+    const canSetAdvance = req.user.role === 'Admin' || req.user.role === 'SuperAdmin';
+    const parsedAdvance = canSetAdvance ? (parseFloat(advanceAmount) || 0) : minimumAdvance;
     if (parsedAdvance < minimumAdvance) {
       return res.status(400).json({ error: `Advance collection is mandatory and must be at least ₹${minimumAdvance}` });
     }
@@ -76,7 +83,7 @@ export async function createAllocation(req, res) {
         (id, "bodyId", "cabinId", "admissionDateTime", "advanceAmount",
          "hourlyRate", "minHours", "freeHours", "estimatedReleaseDateTime", hospital_id)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-    `, [id, bodyId, cabinId, admissionStr, advanceAmount || 0, firstDayCharge, 1, 0, estimatedStr, hospitalId]);
+    `, [id, bodyId, cabinId, admissionStr, parsedAdvance, firstDayCharge, 1, 0, estimatedStr, hospitalId]);
 
     await runQuery("UPDATE cabins SET status = 'Occupied' WHERE id = $1", [cabinId]);
     await runQuery("UPDATE bodies SET status = 'Allocated' WHERE id = $1", [bodyId]);

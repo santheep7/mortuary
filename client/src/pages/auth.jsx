@@ -203,13 +203,12 @@ export default function Auth() {
 
   const handleLoginChange = (e) => {
     const { name, value } = e.target;
-    const processedValue = name === 'employeeId' ? value.toUpperCase() : value;
-    setLoginForm((prev) => ({ ...prev, [name]: processedValue }));
+    setLoginForm((prev) => ({ ...prev, [name]: value }));
     if (loginErrors[name]) setLoginErrors((prev) => ({ ...prev, [name]: "" }));
 
-    if (name === 'employeeId' && processedValue.length >= 3) {
-      fetchClientByEmployeeId(processedValue);
-    } else if (name === 'employeeId' && processedValue.length < 3) {
+    if (name === 'employeeId' && value.length >= 3) {
+      fetchClientByEmployeeId(value);
+    } else if (name === 'employeeId' && value.length < 3) {
       setLoginClientLogo(null);
     }
   };

@@ -219,6 +219,34 @@ function BodyRegistration() {
     }
   };
 
+  // Time of Death is stored as a 24-hour "HH:MM" string internally, unchanged
+  // - print templates and the detail view already expect that format. This
+  // three-part widget only replaces the native <input type="time">, which
+  // silently renders in 24-hour format with no visible AM/PM on some
+  // OS/browser locale settings, with no way to force 12-hour display via
+  // plain HTML - so AM/PM could go missing depending on whoever's laptop
+  // this runs on.
+  const getTimeOfDeathParts = () => {
+    const raw = formData.timeOfDeath;
+    if (!raw || !/^\d{2}:\d{2}$/.test(raw)) return { hour12: '', minute: '', ampm: 'AM' };
+    const [h, m] = raw.split(':').map(Number);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    let hour12 = h % 12;
+    if (hour12 === 0) hour12 = 12;
+    return { hour12: String(hour12).padStart(2, '0'), minute: String(m).padStart(2, '0'), ampm };
+  };
+
+  const handleTimeOfDeathPartChange = (part, value) => {
+    const current = { ...getTimeOfDeathParts(), [part]: value };
+    if (!current.hour12 || current.minute === '') {
+      setFormData((prev) => ({ ...prev, timeOfDeath: '' }));
+      return;
+    }
+    let hour24 = parseInt(current.hour12, 10) % 12;
+    if (current.ampm === 'PM') hour24 += 12;
+    setFormData((prev) => ({ ...prev, timeOfDeath: `${String(hour24).padStart(2, '0')}:${current.minute}` }));
+  };
+
   const handleNocUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -922,13 +950,39 @@ function BodyRegistration() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Time of Death</label>
-                    <input
-                      type="time"
-                      name="timeOfDeath"
-                      value={formData.timeOfDeath}
-                      onChange={handleInputChange}
-                      className="input-field"
-                    />
+                    <div className="grid grid-cols-3 gap-2">
+                      <select
+                        value={getTimeOfDeathParts().hour12}
+                        onChange={(e) => handleTimeOfDeathPartChange('hour12', e.target.value)}
+                        className="input-field"
+                        aria-label="Hour"
+                      >
+                        <option value="">HH</option>
+                        {Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0')).map((h) => (
+                          <option key={h} value={h}>{h}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={getTimeOfDeathParts().minute}
+                        onChange={(e) => handleTimeOfDeathPartChange('minute', e.target.value)}
+                        className="input-field"
+                        aria-label="Minute"
+                      >
+                        <option value="">MM</option>
+                        {Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0')).map((m) => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={getTimeOfDeathParts().ampm}
+                        onChange={(e) => handleTimeOfDeathPartChange('ampm', e.target.value)}
+                        className="input-field"
+                        aria-label="AM or PM"
+                      >
+                        <option value="AM">AM</option>
+                        <option value="PM">PM</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 
