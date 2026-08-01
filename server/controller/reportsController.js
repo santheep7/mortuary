@@ -7,8 +7,11 @@ export async function getCabinOccupancy(req, res) {
     const params = [];
     let idx = 1;
 
+    // endDate arrives as a plain YYYY-MM-DD from a date input, which Postgres
+    // casts to midnight - a plain "<=" would silently drop every allocation
+    // from that whole day. Compare against the start of the next day instead.
     if (startDate) { where += ` AND ca."admissionDateTime" >= $${idx++}`; params.push(startDate); }
-    if (endDate)   { where += ` AND ca."admissionDateTime" <= $${idx++}`; params.push(endDate); }
+    if (endDate)   { where += ` AND ca."admissionDateTime" < ($${idx++}::date + INTERVAL '1 day')`; params.push(endDate); }
     if (cabinNo)   { where += ` AND c."cabinNumber" = $${idx++}`;         params.push(cabinNo); }
     if (bodyType)  { where += ` AND b."bodyType" = $${idx++}`;            params.push(bodyType); }
     const hc = hospitalClause(req.hospitalId, idx, 'ca.hospital_id');
@@ -74,29 +77,44 @@ export async function getInvoiceAnalysis(req, res) {
     let idx = 1;
 
     if (startDate) { where += ` AND b."createdAt" >= $${idx++}`; params.push(startDate); }
-    if (endDate)   { where += ` AND b."createdAt" <= $${idx++}`; params.push(endDate); }
+    if (endDate)   { where += ` AND b."createdAt" < ($${idx++}::date + INTERVAL '1 day')`; params.push(endDate); }
     if (status)    { where += ` AND b.status = $${idx++}`;        params.push(status); }
     const hc = hospitalClause(req.hospitalId, idx, 'b.hospital_id');
     where += hc.sql; params.push(...hc.params);
 
+    // A bill's true amount includes both the mortuary-stay charge (billing.*)
+    // and any service charge (e.g. body dressing) recorded separately in
+    // service_billing - billing.servicesAmount is never populated (always 0),
+    // so summing only billing.* undercounts every bill that has a service.
     const [data, summary] = await Promise.all([
       queryAll(`
-        SELECT b.*, bo."patientName", bo."bodyNumber", bo."bodyType"
+        SELECT
+          b.id, b."bodyId", b.status, b."createdAt", b."discountReason",
+          bo."patientName", bo."bodyNumber", bo."bodyType",
+          b."totalAmount" + COALESCE(sb."serviceAmount", 0)    AS "totalAmount",
+          b."discountAmount" + COALESCE(sb."discountAmount", 0) AS "discountAmount",
+          b."netAmount" + COALESCE(sb."netAmount", 0)          AS "netAmount"
         FROM billing b
         JOIN bodies bo ON b."bodyId" = bo.id
+        LEFT JOIN LATERAL (
+          SELECT * FROM service_billing s WHERE s."billingId" = b.id LIMIT 1
+        ) sb ON true
         ${where}
         ORDER BY b."createdAt" DESC
       `, params),
       queryOne(`
         SELECT
           COUNT(*) AS "totalBills",
-          COALESCE(SUM(b."totalAmount"), 0)    AS "totalAmount",
-          COALESCE(SUM(b."discountAmount"), 0) AS "totalDiscount",
-          COALESCE(SUM(b."netAmount"), 0)      AS "totalNetAmount",
+          COALESCE(SUM(b."totalAmount" + COALESCE(sb."serviceAmount", 0)), 0)    AS "totalAmount",
+          COALESCE(SUM(b."discountAmount" + COALESCE(sb."discountAmount", 0)), 0) AS "totalDiscount",
+          COALESCE(SUM(b."netAmount" + COALESCE(sb."netAmount", 0)), 0)          AS "totalNetAmount",
           COUNT(*) FILTER (WHERE b.status = 'Settled') AS "settled",
           COUNT(*) FILTER (WHERE b.status = 'Pending') AS "pending"
         FROM billing b
         JOIN bodies bo ON b."bodyId" = bo.id
+        LEFT JOIN LATERAL (
+          SELECT * FROM service_billing s WHERE s."billingId" = b.id LIMIT 1
+        ) sb ON true
         ${where}
       `, params),
     ]);
@@ -126,7 +144,7 @@ export async function getConcessionReport(req, res) {
     let idx = 1;
 
     if (startDate) { where += ` AND b."createdAt" >= $${idx++}`; params.push(startDate); }
-    if (endDate)   { where += ` AND b."createdAt" <= $${idx++}`; params.push(endDate); }
+    if (endDate)   { where += ` AND b."createdAt" < ($${idx++}::date + INTERVAL '1 day')`; params.push(endDate); }
     const hc = hospitalClause(req.hospitalId, idx, 'b.hospital_id');
     where += hc.sql; params.push(...hc.params);
 

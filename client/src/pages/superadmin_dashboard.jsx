@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { API_BASE, getUploadUrl } from '../config.js';
 import { useMortuaryName } from '../context/MortuaryNameContext.jsx';
+import PasswordInput from '../components/auth/PasswordInput.jsx';
 
 function SuperAdminDashboard() {
   const { search } = window.location;
@@ -151,6 +152,17 @@ function SuperAdminDashboard() {
       fetchDashboardData();
     } catch (error) {
       alert('Error updating hospital: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleDeleteHospital = async (h) => {
+    if (!confirm(`Permanently delete "${h.name}"? This cannot be undone.`)) return;
+    try {
+      await axios.delete(`${API_BASE}/superadmin/hospitals/${h.id}`);
+      fetchDashboardData();
+      alert('Hospital deleted successfully');
+    } catch (error) {
+      alert('Error deleting hospital: ' + (error.response?.data?.error || error.message));
     }
   };
 
@@ -336,6 +348,18 @@ function SuperAdminDashboard() {
                         >
                           <Power size={16} />
                         </button>
+                        <button
+                          onClick={() => handleDeleteHospital(h)}
+                          disabled={Number(h.bodyCount) > 0}
+                          className={Number(h.bodyCount) > 0
+                            ? 'text-slate-300 cursor-not-allowed'
+                            : 'text-red-600 hover:text-red-800'}
+                          title={Number(h.bodyCount) > 0
+                            ? 'Cannot delete - this hospital has body records. Deactivate it instead.'
+                            : 'Delete hospital permanently'}
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       </td>
                     </tr>
                   ))
@@ -460,7 +484,7 @@ function SuperAdminDashboard() {
       {/* Add Hospital Modal */}
       {showAddHospitalModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="backdrop-blur-md bg-white/5 border border-white/20 rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
+          <div className="bg-white border border-slate-200 rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
             <div className="flex items-start justify-between gap-3 mb-4">
               <h3 className="text-lg font-bold text-slate-900">Onboard New Hospital</h3>
               <button
@@ -573,10 +597,13 @@ function SuperAdminDashboard() {
                     className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
                 </div>
                 <div>
-                  <label className="text-sm font-extrabold text-slate-800">Admin Password</label>
-                  <input type="password" required minLength={8} value={newHospital.adminPassword}
+                  <label className="text-sm font-extrabold text-slate-800">Temporary Password</label>
+                  <PasswordInput required minLength={8} value={newHospital.adminPassword}
                     onChange={(e) => setNewHospital({ ...newHospital, adminPassword: e.target.value })}
                     className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
+                  <p className="text-[10px] font-semibold text-slate-500 mt-1">
+                    The Admin will be required to set their own password on first login.
+                  </p>
                 </div>
               </div>
 

@@ -42,7 +42,18 @@ process.on('uncaughtException', (err) => console.error('Uncaught exception (serv
 process.on('unhandledRejection', (err) => console.error('Unhandled rejection (server stayed up):', err));
 
 // ── Middleware ───────────────────────────────────────────────────────────────
-app.use(cors());
+// cors() with no options allows every origin on the internet to call this
+// API - harmless in dev (the client only ever reaches this server through
+// Vite's same-origin proxy, never a direct cross-origin browser request) and
+// in production (client + API are served from the same origin/process), but
+// not something to leave open by default on a system holding health records.
+// CLIENT_ORIGIN lets a real deployed frontend on its own domain be added
+// explicitly, rather than reopening this to everyone again.
+const allowedOrigins = (process.env.CLIENT_ORIGIN || 'http://localhost:3000').split(',');
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true,
+}));
 app.use(cookieParser());
 app.use(express.json());
 // Logos are branding, shown on the login/register page before anyone is
@@ -85,6 +96,23 @@ app.get('/api/hospitals/by-admin-username/:username', getHospitalByAdminUsername
 // Dashboard & health
 app.get('/api/dashboard/stats', authenticate, STAFF, getDashboardStats);
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
+
+// ── Serve the built client (production only) ─────────────────────────────────
+// In dev, Vite's own dev server handles the client on its own port with hot
+// reload - this block is only for a real deployment, where nothing else is
+// running to serve it. Combining client+API into one process keeps the
+// eventual deploy to one box simple: one thing to build, one thing to run.
+if (process.env.NODE_ENV === 'production') {
+  const clientDist = path.join(__dirname, '..', 'client', 'dist');
+  app.use(express.static(clientDist));
+  // SPA fallback: any GET that isn't /api or /uploads should still serve
+  // index.html so React Router can take over client-side (e.g. a hard
+  // refresh on /dashboard/body-registration would otherwise 404, since
+  // that path only exists inside the React app, not as a real file).
+  app.get(/^(?!\/api|\/uploads).*/, (req, res) => {
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+}
 
 // ── Error handling ───────────────────────────────────────────────────────────
 // Final safety net: anything that reaches here would otherwise be Express's

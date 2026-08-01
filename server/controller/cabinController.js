@@ -59,6 +59,11 @@ export async function deleteCabin(req, res) {
   try {
     const { id } = req.params;
     const hc = hospitalClause(req.hospitalId, 2);
+    const cabin = await queryOne(`SELECT status FROM cabins WHERE id = $1${hc.sql}`, [id, ...hc.params]);
+    if (!cabin) return res.status(404).json({ error: 'Cabin not found' });
+    if (cabin.status === 'Occupied') {
+      return res.status(409).json({ error: 'This cabin is currently occupied and cannot be deleted. Release the body first.' });
+    }
     await runQuery(`UPDATE cabins SET status = 'Deactivated' WHERE id = $1${hc.sql}`, [id, ...hc.params]);
     res.json({ message: 'Cabin deactivated' });
   } catch (error) {

@@ -173,6 +173,13 @@ function Billing() {
     return Math.max(0, getStayGross() - getStayAdvance() - getStayDiscount());
   };
 
+  const getSelectedAuthority = () => authorities.find(a => a.id === billingData.concessionAuthorityId);
+  const getAuthorityMaxDiscount = () => {
+    const auth = getSelectedAuthority();
+    if (!auth) return null;
+    return Number(getStayGross()) * (Number(auth.maxDiscountPercent || 0) / 100);
+  };
+
   const getServiceGross = () => {
     return billingData.bodyDressingRequired ? Number(billingData.bodyDressingCharge || 0) : 0;
   };
@@ -824,13 +831,23 @@ function Billing() {
                       <label className="block text-sm text-gray-600 mb-1">Concession Authority</label>
                       <select
                         value={billingData.concessionAuthorityId}
-                        onChange={(e) => setBillingData({ ...billingData, concessionAuthorityId: e.target.value })}
+                        onChange={(e) => {
+                          const selectedId = e.target.value;
+                          const auth = authorities.find(a => a.id === selectedId);
+                          const cappedDiscount = auth ? Number(getStayGross()) * (Number(auth.maxDiscountPercent || 0) / 100) : 0;
+                          setBillingData({
+                            ...billingData,
+                            concessionAuthorityId: selectedId,
+                            discountAmount: cappedDiscount,
+                            discountReason: auth ? `${auth.name} (${auth.designation}) - ${auth.maxDiscountPercent}% Concession` : billingData.discountReason
+                          });
+                        }}
                         className="input-field text-sm"
                         disabled={billingData.staffConcession}
                       >
                         <option value="">Select Authority</option>
                         {authorities.map((auth) => (
-                          <option key={auth.id} value={auth.id}>{auth.name} ({auth.designation})</option>
+                          <option key={auth.id} value={auth.id}>{auth.name} ({auth.designation}) - up to {auth.maxDiscountPercent}%</option>
                         ))}
                       </select>
                     </div>
@@ -839,11 +856,22 @@ function Billing() {
                       <input
                         type="number"
                         value={billingData.staffConcession ? getStayGross() : (billingData.discountAmount || '')}
-                        onChange={(e) => setBillingData({ ...billingData, discountAmount: parseFloat(e.target.value) || 0 })}
+                        onChange={(e) => {
+                          let value = parseFloat(e.target.value) || 0;
+                          const cap = getAuthorityMaxDiscount();
+                          if (cap !== null && value > cap) value = cap;
+                          setBillingData({ ...billingData, discountAmount: value });
+                        }}
                         className="input-field text-sm"
                         min="0"
+                        max={getAuthorityMaxDiscount() ?? undefined}
                         disabled={billingData.staffConcession}
                       />
+                      {getSelectedAuthority() && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Max allowed for {getSelectedAuthority().name}: ₹{getAuthorityMaxDiscount().toFixed(2)} ({getSelectedAuthority().maxDiscountPercent}%)
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div>

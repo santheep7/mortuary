@@ -374,6 +374,13 @@ export async function initDatabase() {
       ['users',                  'updated_at',               'TIMESTAMP DEFAULT CURRENT_TIMESTAMP'],
       ['users',                  'must_change_password',     'BOOLEAN DEFAULT FALSE'],
       ['users',                  'password_reset_requested', 'BOOLEAN DEFAULT FALSE'],
+      // Same forced-reset mechanism as users.must_change_password, applied
+      // to Admin accounts - a hospital's Admin shouldn't have SuperAdmin
+      // permanently knowing their real password, since SuperAdmin is an
+      // external entity from the hospital's own perspective. SuperAdmin (or
+      // an inviting Admin, for co-admins) sets a temporary password only;
+      // the account is forced to change it before it can do anything else.
+      ['admin',                  'must_change_password',     'BOOLEAN DEFAULT FALSE'],
       ['system_settings',        'mortuary_name',            "VARCHAR(255) DEFAULT 'MOSC Medical College Mortuary'"],
       ['system_settings',        'mortuary_logo',            'TEXT'],
       // Pricing engine (Phase 3): each hospital's system_settings row now

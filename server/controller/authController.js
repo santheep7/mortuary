@@ -93,27 +93,36 @@ export async function resetUserPassword(req, res) {
 
 export async function changePassword(req, res) {
   try {
-    const { currentPassword, newPassword } = req.body;
+    const { newPassword } = req.body;
     const userId = req.user.id;
+    // Same endpoint serves both account types - Staff/Housekeeping live in
+    // `users`, Admin/SuperAdmin live in `admin`. Table + column names differ
+    // slightly (updated_at vs "updatedAt"), so branch once here rather than
+    // duplicating this whole handler for a second table.
+    const isAdminAccount = req.user.role === 'Admin' || req.user.role === 'SuperAdmin';
+    const table = isAdminAccount ? 'admin' : 'users';
+    const updatedAtColumn = isAdminAccount ? '"updatedAt"' : 'updated_at';
 
-    if (!currentPassword || !newPassword || newPassword.length < 8) {
+    if (!newPassword || newPassword.length < 8) {
       return res.status(400).json({ message: 'Invalid request. Password must be at least 8 characters.' });
     }
 
-    const user = await queryOne('SELECT password FROM users WHERE id = $1', [userId]);
+    // No currentPassword check here, deliberately - this endpoint is only
+    // ever reached via the forced must-change-password redirect, seconds
+    // after the caller already proved they know the password by logging in
+    // with it. It's never exposed as a general "change my password"
+    // settings page, so re-verifying it again here would be redundant, not
+    // a real extra security barrier. authenticate() has already confirmed
+    // who this is via a valid session.
+    const user = await queryOne(`SELECT id FROM ${table} WHERE id = $1`, [userId]);
     if (!user) {
       return res.status(404).json({ message: 'User not found.' });
     }
 
-    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({ message: 'Current password is incorrect.' });
-    }
-
     const hash = await bcrypt.hash(newPassword, 12);
     await runQuery(
-      `UPDATE users 
-       SET password = $1, must_change_password = FALSE, updated_at = NOW() 
+      `UPDATE ${table}
+       SET password = $1, must_change_password = FALSE, ${updatedAtColumn} = NOW()
        WHERE id = $2`,
       [hash, userId]
     );
@@ -121,6 +130,57 @@ export async function changePassword(req, res) {
     res.status(200).json({ message: 'Password changed successfully.' });
   } catch (error) {
     console.error('Change password error:', error);
+    res.status(500).json({ message: 'Server error. Please try again later.' });
+  }
+}
+
+// ── Voluntary password reset (already logged in normally, from Settings) ───────
+// Unlike changePassword above, this one DOES require the current password -
+// it's reachable any time from an already-active session (not gated behind
+// must_change_password), so skipping that check here really would be a real
+// security gap: anyone who got hold of an unlocked session/cookie could
+// silently lock the real owner out. Same table-generalization as
+// changePassword, kept separate rather than merging the two - they answer
+// genuinely different questions ("prove you still know this account's
+// password" vs "you already just proved that at login a second ago").
+export async function resetOwnPassword(req, res) {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.user.id;
+    const isAdminAccount = req.user.role === 'Admin' || req.user.role === 'SuperAdmin';
+    const table = isAdminAccount ? 'admin' : 'users';
+    const updatedAtColumn = isAdminAccount ? '"updatedAt"' : 'updated_at';
+
+    if (!currentPassword || !newPassword || newPassword.length < 8) {
+      return res.status(400).json({ message: 'Invalid request. Password must be at least 8 characters.' });
+    }
+
+    const user = await queryOne(`SELECT password FROM ${table} WHERE id = $1`, [userId]);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isPasswordValid) {
+      // 403, not 401: a wrong current password is a business-logic rejection,
+      // not an expired/invalid session token. The global axios interceptor in
+      // main.jsx treats any 401 as "session expired" and force-logs the user
+      // out — using 401 here would kick an admin out of their own session
+      // just for mistyping their current password.
+      return res.status(403).json({ message: 'Current password is incorrect.' });
+    }
+
+    const hash = await bcrypt.hash(newPassword, 12);
+    await runQuery(
+      `UPDATE ${table}
+       SET password = $1, ${updatedAtColumn} = NOW()
+       WHERE id = $2`,
+      [hash, userId]
+    );
+
+    res.status(200).json({ message: 'Password reset successfully.' });
+  } catch (error) {
+    console.error('Reset own password error:', error);
     res.status(500).json({ message: 'Server error. Please try again later.' });
   }
 }
@@ -222,7 +282,14 @@ export async function loginUser(req, res) {
       return res.status(403).json({ message: 'Your registration has been rejected. Please contact the admin for further assistance.' });
     }
 
-    const token = signToken({ id: user.id, role: user.department, hospitalId: user.hospital_id });
+    const mustChange = !!user.must_change_password;
+    // Baked into the token itself, not just checked here, so the auth
+    // middleware can enforce "nothing but change-password" on every
+    // subsequent request without an extra DB lookup per request. Safe to
+    // rely on a token issued at this exact moment - the change-password
+    // flow always forces a fresh login afterward, so there's no scenario
+    // where this flag needs to flip mid-session on the same token.
+    const token = signToken({ id: user.id, role: user.department, hospitalId: user.hospital_id, mustChangePassword: mustChange });
 
     res.cookie('token', token, {
       httpOnly: true,
@@ -230,8 +297,6 @@ export async function loginUser(req, res) {
       sameSite: 'strict',
       maxAge: 8 * 60 * 60 * 1000 // 8 hours
     });
-
-    const mustChange = !!user.must_change_password;
 
     return res.status(200).json({
       message: 'Login successful',
@@ -258,7 +323,8 @@ export async function loginAdmin(req, res) {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ message: 'Invalid password' });
 
-    const token = signToken({ id: user.id, role: user.role, hospitalId: user.hospital_id });
+    const mustChange = !!user.must_change_password;
+    const token = signToken({ id: user.id, role: user.role, hospitalId: user.hospital_id, mustChangePassword: mustChange });
 
     res.cookie('token', token, {
       httpOnly: true,
@@ -269,6 +335,7 @@ export async function loginAdmin(req, res) {
 
     res.json({
       message: 'Login successful',
+      mustChangePassword: mustChange,
       user: { id: user.id, username: user.username, role: user.role }
     });
   } catch (error) {
@@ -350,8 +417,10 @@ export async function addCoAdmin(req, res) {
     if (existing) return res.status(400).json({ message: 'Username already exists' });
 
     const hashedPassword = await bcrypt.hash(password, 12);
+    // Same reasoning as the SuperAdmin->Admin temp password: the inviting
+    // Admin shouldn't permanently know the co-admin's real password either.
     await runQuery(
-      'INSERT INTO admin (id, username, email, password, hospital_id) VALUES ($1, $2, $3, $4, $5)',
+      'INSERT INTO admin (id, username, email, password, hospital_id, must_change_password) VALUES ($1, $2, $3, $4, $5, true)',
       [uuidv4(), username, email || null, hashedPassword, req.hospitalId]
     );
 

@@ -10,11 +10,26 @@ import {
   UserPlus, ArrowRight, ArrowUpDown, UserCheck, ShieldPlus
 } from 'lucide-react';
 
-import { API_BASE } from '../config.js';
+import { API_BASE, getUploadUrl } from '../config.js';
 import { useMortuaryName } from '../context/MortuaryNameContext.jsx';
+import PasswordInput from '../components/auth/PasswordInput.jsx';
 
 function AdminDashboard() {
-  const { mortuaryName } = useMortuaryName();
+  const { mortuaryName, mortuaryLogo } = useMortuaryName();
+  // mortuaryLogo from context is a relative uploads path (e.g.
+  // "/uploads/logo.png"), not a full URL - resolving it here, same as every
+  // other logo in the app. Without this it resolves against the client's
+  // own dev server (localhost:3000) instead of the backend (localhost:3001),
+  // which has no /uploads route, so the image 404s silently.
+  const resolvedLogo = useMemo(() => {
+    const src = mortuaryLogo;
+    if (!src || typeof src !== 'string') return null;
+    const trimmed = src.trim();
+    if (!trimmed) return null;
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    if (trimmed.startsWith('/')) return getUploadUrl(trimmed);
+    return getUploadUrl(`/${trimmed}`);
+  }, [mortuaryLogo]);
   const [stats, setStats] = useState(null);
   const [cabins, setCabins] = useState([]);
   const [allocations, setAllocations] = useState([]);
@@ -70,9 +85,17 @@ function AdminDashboard() {
     }
   };
 
+  const [syncing, setSyncing] = useState(false);
+
   useEffect(() => {
     fetchDashboardData();
   }, []);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    await fetchDashboardData();
+    setSyncing(false);
+  };
 
   const fetchDashboardData = async () => {
     try {
@@ -319,38 +342,52 @@ function AdminDashboard() {
       
       {/* Executive Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-bold text-blue-600 tracking-wider uppercase bg-blue-50 px-2.5 py-1 rounded-full w-fit mb-1.5">
-            <Activity size={12} className="animate-pulse" /> Admin Operations Control Center
+        <div className="flex items-center gap-4">
+          {resolvedLogo && (
+            <img
+              src={resolvedLogo}
+              alt={mortuaryName ? `${mortuaryName} logo` : 'Mortuary logo'}
+              className="h-12 w-12 object-contain rounded-lg border border-slate-200/80 bg-white p-1"
+            />
+          )}
+          <div>
+            <div className="flex items-center gap-2 text-xs font-bold text-blue-600 tracking-wider uppercase bg-blue-50 px-2.5 py-1 rounded-full w-fit mb-1.5">
+              <Activity size={12} className="animate-pulse" /> Admin Operations Control Center
+            </div>
+            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+              Admin Dashboard
+            </h1>
+            <p className="text-sm text-slate-500">
+              {mortuaryName} • System configuration and live resource tracking
+            </p>
           </div>
-          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
-            Admin Dashboard
-          </h1>
-          <p className="text-sm text-slate-500">
-            {mortuaryName} • System configuration and live resource tracking
-          </p>
         </div>
-        <button 
-          onClick={fetchDashboardData}
-          className="btn-primary flex items-center gap-2 text-sm bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2.5 rounded-xl transition-all shadow-sm shadow-blue-200"
+        <button
+          onClick={handleSync}
+          disabled={syncing}
+          className="btn-primary flex items-center gap-2 text-sm bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2.5 rounded-xl transition-all shadow-sm shadow-blue-200 disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          <Sparkles size={16} /> Sync Live Data
+          <Sparkles size={16} className={syncing ? 'animate-spin' : ''} /> {syncing ? 'Syncing...' : 'Sync Live Data'}
         </button>
       </div>
 
       {/* SECTION 1: Executive KPI Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-4">
         {[
-          { label: 'Total Bodies', val: stats?.totalBodies || 0, icon: Users, color: 'text-blue-600 bg-blue-50 border-blue-100' },
-          { label: 'Active Stay', val: computedMetrics.occupied, icon: Bed, color: 'text-red-600 bg-red-50 border-red-100' },
-          { label: 'Cabins Avail', val: computedMetrics.available, icon: CheckSquare, color: 'text-green-600 bg-green-50 border-green-100' },
-          { label: 'Needs Clean', val: computedMetrics.cleaning, icon: Clock, color: 'text-amber-500 bg-amber-50 border-amber-100' },
-          { label: 'Maintenance', val: computedMetrics.maintenance, icon: ShieldAlert, color: 'text-slate-500 bg-slate-100 border-slate-200' },
-          { label: 'Pending Bills', val: stats?.pendingBills || 0, icon: Receipt, color: 'text-purple-600 bg-purple-50 border-purple-100' },
-          { label: 'Released Today', val: stats?.releasedToday || 0, icon: LogOut, color: 'text-emerald-600 bg-emerald-50 border-emerald-100' },
-          { label: 'Occupancy %', val: `${computedMetrics.occupancyRate.toFixed(0)}%`, icon: TrendingUp, color: 'text-sky-600 bg-sky-50 border-sky-100' }
+          { label: 'Total Bodies', val: stats?.totalBodies || 0, icon: Users, color: 'text-blue-600 bg-blue-50 border-blue-100', path: '/dashboard/body-registration' },
+          { label: 'Active Stay', val: computedMetrics.occupied, icon: Bed, color: 'text-red-600 bg-red-50 border-red-100', path: '/dashboard/cabin-allocation' },
+          { label: 'Cabins Avail', val: computedMetrics.available, icon: CheckSquare, color: 'text-green-600 bg-green-50 border-green-100', path: '/dashboard/cabin-allocation' },
+          { label: 'Needs Clean', val: computedMetrics.cleaning, icon: Clock, color: 'text-amber-500 bg-amber-50 border-amber-100', path: '/dashboard/housekeeping' },
+          { label: 'Maintenance', val: computedMetrics.maintenance, icon: ShieldAlert, color: 'text-slate-500 bg-slate-100 border-slate-200', path: '/dashboard/admin/cabin-master' },
+          { label: 'Pending Bills', val: stats?.pendingBills || 0, icon: Receipt, color: 'text-purple-600 bg-purple-50 border-purple-100', path: '/dashboard/billing' },
+          { label: 'Released Today', val: stats?.releasedToday || 0, icon: LogOut, color: 'text-emerald-600 bg-emerald-50 border-emerald-100', path: '/dashboard/release-history' },
+          { label: 'Occupancy %', val: `${computedMetrics.occupancyRate.toFixed(0)}%`, icon: TrendingUp, color: 'text-sky-600 bg-sky-50 border-sky-100', path: '/dashboard/cabin-allocation' }
         ].map((kpi, i) => (
-          <div key={i} className="bg-white border rounded-xl p-3 flex flex-col justify-between hover:shadow-md transition-shadow">
+          <Link
+            key={i}
+            to={kpi.path}
+            className="bg-white border rounded-xl p-3 flex flex-col justify-between hover:shadow-md hover:border-slate-300 transition-shadow cursor-pointer"
+          >
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold text-slate-500 leading-tight">{kpi.label}</span>
               <div className={`${kpi.color.split(' ')[1]} p-1.5 rounded-lg border`}>
@@ -358,7 +395,7 @@ function AdminDashboard() {
               </div>
             </div>
             <div className="text-lg font-bold text-slate-900 leading-none">{kpi.val}</div>
-          </div>
+          </Link>
         ))}
       </div>
 
@@ -564,7 +601,7 @@ function AdminDashboard() {
                 </div>
                 <ArrowRight size={14} className="text-slate-400 group-hover:translate-x-0.5 transition-transform" />
               </Link>
-              <Link to="/dashboard/user-approvals" className="group flex items-center justify-between p-3.5 bg-amber-50/50 hover:bg-amber-50 border border-amber-100 rounded-xl transition-all">
+              <Link to="/dashboard/admin/user-approvals" className="group flex items-center justify-between p-3.5 bg-amber-50/50 hover:bg-amber-50 border border-amber-100 rounded-xl transition-all">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-amber-100 rounded-lg text-amber-600 group-hover:scale-110 transition-transform">
                     <UserCheck size={16} />
@@ -879,8 +916,7 @@ function AdminDashboard() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -945,9 +981,8 @@ function AdminDashboard() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                <input
-                  type="password"
+                <label className="block text-sm font-medium text-gray-700 mb-1">Temporary Password</label>
+                <PasswordInput
                   required
                   minLength={8}
                   value={newCoAdmin.password}
@@ -955,6 +990,9 @@ function AdminDashboard() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="Min 8 characters"
                 />
+                <p className="text-[10px] text-gray-500 mt-1">
+                  They'll be required to set their own password on first login.
+                </p>
               </div>
               <div className="flex gap-3">
                 <button

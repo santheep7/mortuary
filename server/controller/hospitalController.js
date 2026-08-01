@@ -91,8 +91,12 @@ export async function createHospital(req, res) {
 
     const adminId = uuidv4();
     const hashedPassword = await bcrypt.hash(adminPassword, 10);
+    // adminPassword here is a temporary password, not a permanent one -
+    // SuperAdmin is an external entity from the hospital's own perspective,
+    // so it shouldn't permanently know this Admin's real password. Forces
+    // a change on first login (see authenticate middleware + changePassword).
     await runQuery(
-      'INSERT INTO admin (id, username, email, password, hospital_id) VALUES ($1,$2,$3,$4,$5)',
+      'INSERT INTO admin (id, username, email, password, hospital_id, must_change_password) VALUES ($1,$2,$3,$4,$5,true)',
       [adminId, adminUsername, contact_email || null, hashedPassword, hospitalId]
     );
 
@@ -169,7 +173,11 @@ export async function getHospitalByEmployeeId(req, res) {
     const { employeeId } = req.params;
     if (!employeeId) return res.status(400).json({ error: 'Employee ID is required' });
 
-    const user = await queryOne('SELECT hospital_id FROM users WHERE employee_id = $1', [employeeId.trim()]);
+    // Case-insensitive, matching loginUser's own lookup - the frontend no
+    // longer force-uppercases what's typed here (that was a bad login UX,
+    // now removed), so this has to tolerate whatever case the user actually
+    // typed, not just whatever case happens to be stored.
+    const user = await queryOne('SELECT hospital_id FROM users WHERE employee_id ILIKE $1', [employeeId.trim()]);
     if (!user) return res.status(404).json({ error: 'No account found for this Employee ID' });
 
     const hospital = await queryOne('SELECT name, logo FROM hospitals WHERE id = $1', [user.hospital_id]);
@@ -278,6 +286,39 @@ export async function updateHospital(req, res) {
     res.json({ message: 'Hospital updated successfully', hospital: updated, settings });
   } catch (error) {
     console.error('Update hospital error:', error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
+  }
+}
+
+// ── Delete hospital ───────────────────────────────────────────────────────────
+// Only ever a hard delete for a hospital that never got real data - once a
+// single body has been registered, the hospital is carrying medico-legal /
+// billing history that has to be retained, so the only supported "removal"
+// past that point is deactivating it (PUT is_active=false), same as bodies
+// and cabins already block deletion once they have real activity on them.
+export async function deleteHospital(req, res) {
+  try {
+    const { id } = req.params;
+    const hospital = await queryOne('SELECT id, name FROM hospitals WHERE id = $1', [id]);
+    if (!hospital) return res.status(404).json({ error: 'Hospital not found' });
+
+    const { count } = await queryOne('SELECT COUNT(*) AS count FROM bodies WHERE hospital_id = $1', [id]);
+    if (Number(count) > 0) {
+      return res.status(400).json({
+        error: `Cannot delete "${hospital.name}" - it has ${count} body record(s) on file. Deactivate it instead to preserve its history.`
+      });
+    }
+
+    // No bodies ever registered, so it's safe to fully remove every trace of
+    // this hospital: its admins, any cabins it set up, and its settings row.
+    await runQuery('DELETE FROM admin WHERE hospital_id = $1', [id]);
+    await runQuery('DELETE FROM cabins WHERE hospital_id = $1', [id]);
+    await runQuery('DELETE FROM system_settings WHERE hospital_id = $1', [id]);
+    await runQuery('DELETE FROM hospitals WHERE id = $1', [id]);
+
+    res.json({ message: 'Hospital deleted successfully' });
+  } catch (error) {
+    console.error('Delete hospital error:', error);
     res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }

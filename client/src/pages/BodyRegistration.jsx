@@ -5,6 +5,15 @@ import MLCRegistrationPrint from './MLCRegistrationPrint';
 
 import { API_BASE } from '../config.js';
 
+const deriveTimeParts = (raw) => {
+  if (!raw || !/^\d{2}:\d{2}$/.test(raw)) return { hour12: '', minute: '', ampm: 'AM' };
+  const [h, m] = raw.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  let hour12 = h % 12;
+  if (hour12 === 0) hour12 = 12;
+  return { hour12: String(hour12).padStart(2, '0'), minute: String(m).padStart(2, '0'), ampm };
+};
+
 // Format phone number with hyphens: XXX-XXX-XXXX
 const formatPhoneNumber = (value) => {
   const cleaned = value.replace(/\D/g, '');
@@ -32,6 +41,9 @@ const dummyPatients = [
 
 function BodyRegistration() {
   const [bodies, setBodies] = useState([]);
+  const [totalBodies, setTotalBodies] = useState(0);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
   const [showForm, setShowForm] = useState(true);
   const [viewMode, setViewMode] = useState('form'); // 'form' or 'list'
   const [searchQuery, setSearchQuery] = useState('');
@@ -75,13 +87,33 @@ function BodyRegistration() {
     freezerRequired: true
   });
 
+  // Kept independent of formData.timeOfDeath (derived only) so a partial
+  // selection (e.g. hour picked, minute not yet) survives re-render instead
+  // of being wiped back to blank on every keystroke - see
+  // handleTimeOfDeathPartChange.
+  const [timeParts, setTimeParts] = useState({ hour12: '', minute: '', ampm: 'AM' });
+
   const [nocFile, setNocFile] = useState(null);
   const [nocUploading, setNocUploading] = useState(false);
   const nocInputRef = useRef(null);
 
+  // A new search/type filter shouldn't stay on whatever page the previous
+  // query left off on.
   useEffect(() => {
-    fetchBodies();
-    
+    setPage(1);
+  }, [searchQuery, filterType]);
+
+  // Debounced so typing doesn't fire a request per keystroke; filter/page
+  // changes fetch immediately.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchBodies();
+    }, searchQuery ? 400 : 0);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, filterType, page]);
+
+  useEffect(() => {
     // Check if redirected from Patient List with data
     const pendingData = localStorage.getItem('pendingBodyRegistration');
     if (pendingData) {
@@ -116,6 +148,7 @@ function BodyRegistration() {
         freezerRequired: true
       };
       setFormData(newFormData);
+      setTimeParts(deriveTimeParts(newFormData.timeOfDeath));
       setLinkedPatient(patient);
       setHospitalSearch(patient.hospitalNumber || '');
       setShowForm(true);
@@ -156,6 +189,7 @@ function BodyRegistration() {
       reasonOfDeath: patient.reasonOfDeath,
       bodyType: patient.bodyType
     });
+    setTimeParts(deriveTimeParts(patient.timeOfDeath));
     setLinkedPatient(patient);
     setHospitalSearch(patient.hospitalNumber);
     setShowHospitalSuggestions(false);
@@ -177,15 +211,17 @@ function BodyRegistration() {
       reasonOfDeath: '',
       bodyType: 'Non-MLC'
     });
+    setTimeParts({ hour12: '', minute: '', ampm: 'AM' });
   };
 
   const fetchBodies = async () => {
     try {
-      const url = filterType
-        ? `${API_BASE}/bodies?bodyType=${filterType}`
-        : `${API_BASE}/bodies`;
-      const response = await axios.get(url);
-      setBodies(response.data);
+      const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) });
+      if (filterType) params.set('bodyType', filterType);
+      if (searchQuery) params.set('search', searchQuery);
+      const response = await axios.get(`${API_BASE}/bodies?${params.toString()}`);
+      setBodies(response.data.data);
+      setTotalBodies(response.data.total);
     } catch (error) {
       console.error('Error fetching bodies:', error);
     }
@@ -199,6 +235,28 @@ function BodyRegistration() {
       const processedValue = (name === 'witness1Contact' || name === 'witness2Contact') ? formatPhoneNumber(value) : value;
       setFormData({ ...formData, [name]: processedValue });
     }
+  };
+
+  // Time of Death is stored as a 24-hour "HH:MM" string internally, unchanged
+  // - print templates and the detail view already expect that format. This
+  // three-part widget only replaces the native <input type="time">, which
+  // silently renders in 24-hour format with no visible AM/PM on some
+  // OS/browser locale settings, with no way to force 12-hour display via
+  // plain HTML - so AM/PM could go missing depending on whoever's laptop
+  // this runs on.
+  const handleTimeOfDeathPartChange = (part, value) => {
+    const updated = { ...timeParts, [part]: value };
+    setTimeParts(updated);
+    if (!updated.hour12 || updated.minute === '') {
+      // Hour and minute both required before we have a valid 24-hour value
+      // to store, but timeParts (not formData) keeps the partial selection
+      // visible in the selects while the user is still picking.
+      setFormData((prev) => ({ ...prev, timeOfDeath: '' }));
+      return;
+    }
+    let hour24 = parseInt(updated.hour12, 10) % 12;
+    if (updated.ampm === 'PM') hour24 += 12;
+    setFormData((prev) => ({ ...prev, timeOfDeath: `${String(hour24).padStart(2, '0')}:${updated.minute}` }));
   };
 
   const handleNocUpload = async (e) => {
@@ -315,6 +373,7 @@ function BodyRegistration() {
       nocCertificateUrl: '',
       freezerRequired: true
     });
+    setTimeParts({ hour12: '', minute: '', ampm: 'AM' });
     setLinkedPatient(null);
     setHospitalSearch('');
     setShowHospitalSuggestions(false);
@@ -363,6 +422,7 @@ function BodyRegistration() {
         nocCertificateUrl: body.nocCertificateUrl || '',
         freezerRequired: body.freezerRequired !== 0
       });
+      setTimeParts(deriveTimeParts(body.timeOfDeath || ''));
       setNocFile(null);
       setSelectedBody(body);
       setLinkedPatient(null);
@@ -394,12 +454,7 @@ function BodyRegistration() {
     }
   };
 
-  const filteredBodies = bodies.filter(body =>
-    !searchQuery ||
-    body.bodyNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    body.patientName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    body.hospitalNumber?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const totalPages = Math.max(1, Math.ceil(totalBodies / PAGE_SIZE));
 
   return (
     <div className="space-y-6">
@@ -472,8 +527,8 @@ function BodyRegistration() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredBodies.length > 0 ? (
-                    filteredBodies.map((body) => (
+                  {bodies.length > 0 ? (
+                    bodies.map((body) => (
                       <tr key={body.id} className="table-row">
                         <td className="px-6 py-4 text-sm font-medium text-blue-600">{body.bodyNumber}</td>
                         <td className="px-6 py-4 text-sm text-gray-700">{body.patientName || 'N/A'}</td>
@@ -544,6 +599,29 @@ function BodyRegistration() {
                 </tbody>
               </table>
             </div>
+            {totalBodies > 0 && (
+              <div className="flex items-center justify-between px-6 py-3 border-t border-gray-100">
+                <p className="text-sm text-gray-500">
+                  Page {page} of {totalPages} &middot; {totalBodies} total
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page <= 1}
+                    className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page >= totalPages}
+                    className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </>
       ) : (
@@ -886,13 +964,39 @@ function BodyRegistration() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Time of Death</label>
-                    <input
-                      type="time"
-                      name="timeOfDeath"
-                      value={formData.timeOfDeath}
-                      onChange={handleInputChange}
-                      className="input-field"
-                    />
+                    <div className="grid grid-cols-3 gap-2">
+                      <select
+                        value={timeParts.hour12}
+                        onChange={(e) => handleTimeOfDeathPartChange('hour12', e.target.value)}
+                        className="input-field"
+                        aria-label="Hour"
+                      >
+                        <option value="">HH</option>
+                        {Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0')).map((h) => (
+                          <option key={h} value={h}>{h}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={timeParts.minute}
+                        onChange={(e) => handleTimeOfDeathPartChange('minute', e.target.value)}
+                        className="input-field"
+                        aria-label="Minute"
+                      >
+                        <option value="">MM</option>
+                        {Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0')).map((m) => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={timeParts.ampm}
+                        onChange={(e) => handleTimeOfDeathPartChange('ampm', e.target.value)}
+                        className="input-field"
+                        aria-label="AM or PM"
+                      >
+                        <option value="AM">AM</option>
+                        <option value="PM">PM</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 

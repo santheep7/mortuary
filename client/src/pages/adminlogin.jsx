@@ -80,12 +80,22 @@ function AdminLogin() {
 
       localStorage.setItem("role", "Admin");
       localStorage.setItem("admin", JSON.stringify(data.user));
+
+      if (data.mustChangePassword) {
+        // Temporary password (set by SuperAdmin at onboarding, or by another
+        // Admin inviting a co-admin) - the server also enforces this on
+        // every other request, so this redirect isn't the only thing
+        // stopping access, just the friendly path there.
+        navigate("/change-password");
+        return;
+      }
+
       // The sidebar/header show whichever hospital's branding was fetched
       // when the app first loaded (before login) - refresh it now that the
       // login cookie carries this admin's actual hospital_id, or the
       // dashboard would keep showing whatever hospital resolved first.
       await fetchMortuarySettings();
-      navigate("/dashboard/admin-dashboard");
+      navigate("/dashboard/admin");
     } catch (err) {
       setError("Server error");
     } finally {
