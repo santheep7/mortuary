@@ -20,11 +20,32 @@ function CabinAllocation() {
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const [firstDayCharge, setFirstDayCharge] = useState(2100);
+  // Mirrors the shape/defaults of server/config/pricing.js's getHospitalSettings
+  // fallback - kept in sync with the backend rather than hardcoding a single
+  // "first day charge" number, since which field actually matters (first-day
+  // flat fee vs. daily rate vs. nothing) depends on the hospital's pricing_model.
+  const [settings, setSettings] = useState({
+    pricing_model: 'tiered_flat_hourly',
+    first_day_charge: 2100,
+    hourly_charge_after_24hrs: 130,
+    daily_rate: 500,
+  });
   const [allocationData, setAllocationData] = useState({
     advanceAmount: 2100,
     estimatedDaysOfStay: 3
   });
+
+  // Same logic as server/config/pricing.js:getMinimumAdvance - must stay in
+  // sync with the backend or Staff sees/enforces a different minimum advance
+  // than the one the server will actually require at allocation time.
+  const getMinimumAdvance = (s) => {
+    switch (s.pricing_model) {
+      case 'flat_daily': return Number(s.daily_rate) || 0;
+      case 'free':       return 0;
+      default:           return Number(s.first_day_charge) || 0; // tiered_flat_hourly
+    }
+  };
+  const minimumAdvance = getMinimumAdvance(settings);
 
   useEffect(() => {
     fetchData();
@@ -36,14 +57,19 @@ function CabinAllocation() {
         axios.get(`${API_BASE}/cabins`),
         axios.get(`${API_BASE}/bodies?status=Registered`),
         axios.get(`${API_BASE}/cabin-allocations`),
-        axios.get(`${API_BASE}/billing-settings`).catch(() => ({ data: { first_day_charge: 2100 } }))
+        axios.get(`${API_BASE}/billing-settings`).catch(() => ({ data: null }))
       ]);
 
       setCabins(cabinsRes.data);
       setBodies(bodiesRes.data);
       setAllocations(allocationsRes.data);
-      if (settingsRes.data && settingsRes.data.first_day_charge) {
-        setFirstDayCharge(Number(settingsRes.data.first_day_charge));
+      if (settingsRes.data) {
+        setSettings({
+          pricing_model: settingsRes.data.pricing_model || 'tiered_flat_hourly',
+          first_day_charge: Number(settingsRes.data.first_day_charge) || 0,
+          hourly_charge_after_24hrs: Number(settingsRes.data.hourly_charge_after_24hrs) || 0,
+          daily_rate: Number(settingsRes.data.daily_rate) || 0,
+        });
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -89,7 +115,7 @@ function CabinAllocation() {
     setSelectedBody(''); // Reset selected body
     setSearchQuery(''); // Reset search query when opening modal
     setAllocationData({
-      advanceAmount: firstDayCharge,
+      advanceAmount: minimumAdvance,
       estimatedDaysOfStay: 3
     });
     setShowModal(true);
@@ -102,8 +128,8 @@ function CabinAllocation() {
       return;
     }
 
-    if (allocationData.advanceAmount < firstDayCharge) {
-      alert(`Advance collection is mandatory and must be at least ₹${firstDayCharge}`);
+    if (allocationData.advanceAmount < minimumAdvance) {
+      alert(`Advance collection is mandatory and must be at least ₹${minimumAdvance}`);
       return;
     }
 
@@ -125,27 +151,6 @@ function CabinAllocation() {
       console.error('Error allocating cabin:', error);
       console.error('Error response:', error.response?.data);
       alert(`Error: ${error.response?.data?.error || error.response?.data?.message || error.message || 'Error allocating cabin'}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const releaseCabin = async (allocationId) => {
-    if (!confirm('Are you sure you want to release this body from the cabin?')) {
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const response = await axios.put(`${API_BASE}/cabin-allocations/${allocationId}/release`);
-      console.log('Release response:', response.data);
-      alert('Body released from cabin successfully');
-      // Wait a small delay to ensure server has processed the update
-      await new Promise(resolve => setTimeout(resolve, 100));
-      await fetchData();
-    } catch (error) {
-      console.error('Error releasing cabin:', error);
-      alert(`Error: ${error.response?.data?.message || 'Error releasing cabin'}`);
     } finally {
       setLoading(false);
     }
@@ -258,7 +263,6 @@ function CabinAllocation() {
                 <th className="px-4 py-3 text-left">Admission Date/Time</th>
                 <th className="px-4 py-3 text-left">Est. Release</th>
                 <th className="px-4 py-3 text-left">Duration</th>
-                <th className="px-4 py-3 text-left">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -287,20 +291,12 @@ function CabinAllocation() {
                       <td className="px-4 py-4 text-sm text-gray-700">
                         {days > 0 ? `${days} day${days > 1 ? 's' : ''}` : ''} {hours > 0 ? `${hours} hr${hours > 1 ? 's' : ''}` : ''}
                       </td>
-                      <td className="px-4 py-4 text-sm">
-                        <button
-                          onClick={() => releaseCabin(allocation.id)}
-                          className="px-3 py-1 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors text-sm font-medium"
-                        >
-                          Release
-                        </button>
-                      </td>
                     </tr>
                   );
                 })
               ) : (
                 <tr>
-                  <td colSpan="7" className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan="6" className="px-4 py-8 text-center text-gray-500">
                     No active allocations
                   </td>
                 </tr>
@@ -408,12 +404,24 @@ function CabinAllocation() {
                 <h4 className="font-semibold flex items-center gap-1.5 text-sm text-yellow-900">
                   <Clock size={14} /> Stay Billing Policy
                 </h4>
-                <p>
-                  * First 24 hours is charged as a flat <strong>₹{firstDayCharge}</strong> (covered by the mandatory advance).
-                </p>
-                <p>
-                  * Every subsequent hour after 24 hours is charged at the rate of <strong>₹130/hour</strong> (rounded up).
-                </p>
+                {settings.pricing_model === 'tiered_flat_hourly' && (
+                  <>
+                    <p>
+                      * First 24 hours is charged as a flat <strong>₹{settings.first_day_charge}</strong> (covered by the mandatory advance).
+                    </p>
+                    <p>
+                      * Every subsequent hour after 24 hours is charged at the rate of <strong>₹{settings.hourly_charge_after_24hrs}/hour</strong> (rounded up).
+                    </p>
+                  </>
+                )}
+                {settings.pricing_model === 'flat_daily' && (
+                  <p>
+                    * Charged at a flat <strong>₹{settings.daily_rate}/day</strong> (any part of a day counts as a full day, covered by the mandatory advance).
+                  </p>
+                )}
+                {settings.pricing_model === 'free' && (
+                  <p>* This hospital is on a free (no-charge) stay plan. No stay charges apply.</p>
+                )}
                 <p>
                   * This policy applies uniformly to all cabin types.
                 </p>

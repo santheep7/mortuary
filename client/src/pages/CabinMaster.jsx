@@ -36,7 +36,7 @@ function CabinMaster() {
     try {
       const [cabinsRes, authRes] = await Promise.all([
         axios.get(`${API_BASE}/cabins`),
-        axios.get(`${API_BASE}/concession-authorities`)
+        axios.get(`${API_BASE}/bodies/concession-authorities`)
       ]);
 
       setCabins(cabinsRes.data);
@@ -103,6 +103,11 @@ function CabinMaster() {
   };
 
   const deleteCabin = async (id) => {
+    const cabin = cabins.find(c => c.id === id);
+    if (cabin?.status === 'Occupied') {
+      alert('This cabin is currently occupied and cannot be deleted. Release the body first, then try again.');
+      return;
+    }
     if (!confirm('Are you sure you want to deactivate this cabin?')) return;
 
     try {
@@ -111,7 +116,7 @@ function CabinMaster() {
       fetchData();
     } catch (error) {
       console.error('Error deleting cabin:', error);
-      alert(`Error: ${error.response?.data?.message || 'Error deleting cabin'}`);
+      alert(`Error: ${error.response?.data?.error || error.response?.data?.message || 'Error deleting cabin'}`);
     }
   };
 
@@ -142,13 +147,13 @@ function CabinMaster() {
     setLoading(true);
 
     try {
-      await axios.post(`${API_BASE}/concession-authorities`, authorityForm);
+      await axios.post(`${API_BASE}/bodies/concession-authorities`, authorityForm);
       alert('Authority added successfully');
       setShowModal(false);
       fetchData();
     } catch (error) {
       console.error('Error saving authority:', error);
-      alert(`Error: ${error.response?.data?.message || 'Error saving authority'}`);
+      alert(`Error: ${error.response?.data?.error || error.response?.data?.message || 'Error saving authority'}`);
     } finally {
       setLoading(false);
     }
@@ -158,7 +163,7 @@ function CabinMaster() {
     if (!confirm('Are you sure you want to delete this concession authority?')) return;
 
     try {
-      await axios.delete(`${API_BASE}/concession-authorities/${id}`);
+      await axios.delete(`${API_BASE}/bodies/concession-authorities/${id}`);
       alert('Authority deleted successfully');
       fetchData();
     } catch (error) {

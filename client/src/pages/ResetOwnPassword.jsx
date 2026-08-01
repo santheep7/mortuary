@@ -3,6 +3,7 @@ import axios from 'axios';
 import { KeyRound, AlertCircle, CheckCircle, Lock } from 'lucide-react';
 
 import { API_BASE } from '../config.js';
+import PasswordInput from '../components/auth/PasswordInput.jsx';
 
 function getPasswordStrength(password) {
   let strength = 0;
@@ -91,11 +92,10 @@ function ResetOwnPassword() {
           <label className="text-sm font-semibold text-gray-700">Current Password *</label>
           <div className="relative">
             <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="password"
+            <PasswordInput
               value={currentPassword}
               onChange={(e) => { setCurrentPassword(e.target.value); setErrors((p) => ({ ...p, currentPassword: '' })); }}
-              className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-sm"
+              className="w-full pl-9 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-sm"
               autoComplete="current-password"
             />
           </div>
@@ -106,11 +106,10 @@ function ResetOwnPassword() {
           <label className="text-sm font-semibold text-gray-700">New Password *</label>
           <div className="relative">
             <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="password"
+            <PasswordInput
               value={newPassword}
               onChange={(e) => { setNewPassword(e.target.value); setErrors((p) => ({ ...p, newPassword: '' })); }}
-              className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-sm"
+              className="w-full pl-9 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-sm"
               placeholder="Min. 8 characters"
               autoComplete="new-password"
             />
@@ -140,11 +139,10 @@ function ResetOwnPassword() {
           <label className="text-sm font-semibold text-gray-700">Confirm New Password *</label>
           <div className="relative">
             <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="password"
+            <PasswordInput
               value={confirmPassword}
               onChange={(e) => { setConfirmPassword(e.target.value); setErrors((p) => ({ ...p, confirmPassword: '' })); }}
-              className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-sm"
+              className="w-full pl-9 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-sm"
               autoComplete="new-password"
             />
           </div>

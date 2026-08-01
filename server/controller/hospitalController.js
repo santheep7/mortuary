@@ -289,3 +289,36 @@ export async function updateHospital(req, res) {
     res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 }
+
+// ── Delete hospital ───────────────────────────────────────────────────────────
+// Only ever a hard delete for a hospital that never got real data - once a
+// single body has been registered, the hospital is carrying medico-legal /
+// billing history that has to be retained, so the only supported "removal"
+// past that point is deactivating it (PUT is_active=false), same as bodies
+// and cabins already block deletion once they have real activity on them.
+export async function deleteHospital(req, res) {
+  try {
+    const { id } = req.params;
+    const hospital = await queryOne('SELECT id, name FROM hospitals WHERE id = $1', [id]);
+    if (!hospital) return res.status(404).json({ error: 'Hospital not found' });
+
+    const { count } = await queryOne('SELECT COUNT(*) AS count FROM bodies WHERE hospital_id = $1', [id]);
+    if (Number(count) > 0) {
+      return res.status(400).json({
+        error: `Cannot delete "${hospital.name}" - it has ${count} body record(s) on file. Deactivate it instead to preserve its history.`
+      });
+    }
+
+    // No bodies ever registered, so it's safe to fully remove every trace of
+    // this hospital: its admins, any cabins it set up, and its settings row.
+    await runQuery('DELETE FROM admin WHERE hospital_id = $1', [id]);
+    await runQuery('DELETE FROM cabins WHERE hospital_id = $1', [id]);
+    await runQuery('DELETE FROM system_settings WHERE hospital_id = $1', [id]);
+    await runQuery('DELETE FROM hospitals WHERE id = $1', [id]);
+
+    res.json({ message: 'Hospital deleted successfully' });
+  } catch (error) {
+    console.error('Delete hospital error:', error);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
+  }
+}

@@ -105,11 +105,11 @@ export default function Dashboard_Base() {
               {sidebarOpen ? (
                 <div className="text-center flex items-center gap-2">
                   {role === "SuperAdmin" ? (
-                    <span className="text-white font-bold text-xl">M</span>
+                    <Building2 className="text-white" size={28} />
                   ) : mortuaryLogo ? (
                     <img src={getUploadUrl(mortuaryLogo)} alt="Logo" className="h-10 w-10 object-contain" />
                   ) : (
-                    <span className="text-white font-bold text-xl">M</span>
+                    <Building2 className="text-white" size={28} />
                   )}
                   <div className="min-w-0">
                     {role === "SuperAdmin" ? (
@@ -127,11 +127,11 @@ export default function Dashboard_Base() {
                 </div>
               ) : (
                 role === "SuperAdmin" ? (
-                  <span className="text-white font-bold text-xl">M</span>
+                  <Building2 className="text-white" size={28} />
                 ) : mortuaryLogo ? (
                   <img src={getUploadUrl(mortuaryLogo)} alt="Logo" className="h-10 w-10 object-contain" />
                 ) : (
-                  <span className="text-white font-bold text-xl">M</span>
+                  <Building2 className="text-white" size={28} />
                 )
               )}
             </Link>

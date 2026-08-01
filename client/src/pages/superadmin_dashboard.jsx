@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { API_BASE, getUploadUrl } from '../config.js';
 import { useMortuaryName } from '../context/MortuaryNameContext.jsx';
+import PasswordInput from '../components/auth/PasswordInput.jsx';
 
 function SuperAdminDashboard() {
   const { search } = window.location;
@@ -151,6 +152,17 @@ function SuperAdminDashboard() {
       fetchDashboardData();
     } catch (error) {
       alert('Error updating hospital: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleDeleteHospital = async (h) => {
+    if (!confirm(`Permanently delete "${h.name}"? This cannot be undone.`)) return;
+    try {
+      await axios.delete(`${API_BASE}/superadmin/hospitals/${h.id}`);
+      fetchDashboardData();
+      alert('Hospital deleted successfully');
+    } catch (error) {
+      alert('Error deleting hospital: ' + (error.response?.data?.error || error.message));
     }
   };
 
@@ -335,6 +347,18 @@ function SuperAdminDashboard() {
                           title={h.is_active ? 'Deactivate' : 'Reactivate'}
                         >
                           <Power size={16} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteHospital(h)}
+                          disabled={Number(h.bodyCount) > 0}
+                          className={Number(h.bodyCount) > 0
+                            ? 'text-slate-300 cursor-not-allowed'
+                            : 'text-red-600 hover:text-red-800'}
+                          title={Number(h.bodyCount) > 0
+                            ? 'Cannot delete - this hospital has body records. Deactivate it instead.'
+                            : 'Delete hospital permanently'}
+                        >
+                          <Trash2 size={16} />
                         </button>
                       </td>
                     </tr>
@@ -574,7 +598,7 @@ function SuperAdminDashboard() {
                 </div>
                 <div>
                   <label className="text-sm font-extrabold text-slate-800">Temporary Password</label>
-                  <input type="password" required minLength={8} value={newHospital.adminPassword}
+                  <PasswordInput required minLength={8} value={newHospital.adminPassword}
                     onChange={(e) => setNewHospital({ ...newHospital, adminPassword: e.target.value })}
                     className="w-full border border-slate-300 rounded-lg px-3 py-2 mt-1" />
                   <p className="text-[10px] font-semibold text-slate-500 mt-1">

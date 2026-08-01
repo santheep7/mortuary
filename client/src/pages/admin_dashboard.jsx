@@ -12,6 +12,7 @@ import {
 
 import { API_BASE, getUploadUrl } from '../config.js';
 import { useMortuaryName } from '../context/MortuaryNameContext.jsx';
+import PasswordInput from '../components/auth/PasswordInput.jsx';
 
 function AdminDashboard() {
   const { mortuaryName, mortuaryLogo } = useMortuaryName();
@@ -915,8 +916,7 @@ function AdminDashboard() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -982,8 +982,7 @@ function AdminDashboard() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Temporary Password</label>
-                <input
-                  type="password"
+                <PasswordInput
                   required
                   minLength={8}
                   value={newCoAdmin.password}

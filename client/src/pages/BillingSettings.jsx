@@ -6,8 +6,10 @@ import { API_BASE } from '../config.js';
 
 function BillingSettings() {
   const [rates, setRates] = useState({
+    pricing_model: 'tiered_flat_hourly',
     first_day_charge: 2100,
     hourly_charge_after_24hrs: 130,
+    daily_rate: 500,
     updated_by: 'System',
     updated_at: ''
   });
@@ -52,8 +54,10 @@ function BillingSettings() {
 
     try {
       const response = await axios.post(`${API_BASE}/billing-settings`, {
+        pricing_model: rates.pricing_model,
         first_day_charge: parseFloat(rates.first_day_charge),
         hourly_charge_after_24hrs: parseFloat(rates.hourly_charge_after_24hrs),
+        daily_rate: parseFloat(rates.daily_rate),
         updated_by: username
       });
 
@@ -110,61 +114,117 @@ function BillingSettings() {
         </div>
       ) : (
         <form onSubmit={handleSave} className="card p-6 space-y-6 bg-white shadow-sm border rounded-2xl">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* First 24 Hours Charge */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-semibold text-gray-700">
-                First 24 Hours Charge (₹) *
-              </label>
-              <div className="relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 font-medium">₹</span>
-                <input
-                  type="number"
-                  name="first_day_charge"
-                  value={rates.first_day_charge}
-                  onChange={handleChange}
-                  className="w-full pl-8 pr-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-sm"
-                  min="0"
-                  step="0.01"
-                  required
-                />
-              </div>
-              <p className="text-xs text-gray-400">
-                Mandatory flat fee and minimum advance required during allocation.
-              </p>
-            </div>
-
-            {/* Additional Hourly Charge */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-semibold text-gray-700">
-                Additional Hourly Charge (₹/hr) *
-              </label>
-              <div className="relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 font-medium">₹</span>
-                <input
-                  type="number"
-                  name="hourly_charge_after_24hrs"
-                  value={rates.hourly_charge_after_24hrs}
-                  onChange={handleChange}
-                  className="w-full pl-8 pr-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-sm"
-                  min="0"
-                  step="0.01"
-                  required
-                />
-              </div>
-              <p className="text-xs text-gray-400">
-                Charged for each additional hour after the initial 24-hour stay.
-              </p>
-            </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-semibold text-gray-700">Pricing Model *</label>
+            <select
+              name="pricing_model"
+              value={rates.pricing_model}
+              onChange={handleChange}
+              className="w-full px-3.5 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-sm"
+            >
+              <option value="tiered_flat_hourly">Tiered - flat first day + hourly after 24h</option>
+              <option value="flat_daily">Flat daily rate</option>
+              <option value="free">Free</option>
+            </select>
           </div>
+
+          {rates.pricing_model === 'tiered_flat_hourly' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* First 24 Hours Charge */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-semibold text-gray-700">
+                  First 24 Hours Charge (₹) *
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 font-medium">₹</span>
+                  <input
+                    type="number"
+                    name="first_day_charge"
+                    value={rates.first_day_charge}
+                    onChange={handleChange}
+                    className="w-full pl-8 pr-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-sm"
+                    min="0"
+                    step="0.01"
+                    required
+                  />
+                </div>
+                <p className="text-xs text-gray-400">
+                  Mandatory flat fee and minimum advance required during allocation.
+                </p>
+              </div>
+
+              {/* Additional Hourly Charge */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-semibold text-gray-700">
+                  Additional Hourly Charge (₹/hr) *
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 font-medium">₹</span>
+                  <input
+                    type="number"
+                    name="hourly_charge_after_24hrs"
+                    value={rates.hourly_charge_after_24hrs}
+                    onChange={handleChange}
+                    className="w-full pl-8 pr-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-sm"
+                    min="0"
+                    step="0.01"
+                    required
+                  />
+                </div>
+                <p className="text-xs text-gray-400">
+                  Charged for each additional hour after the initial 24-hour stay.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {rates.pricing_model === 'flat_daily' && (
+            <div className="flex flex-col gap-1.5 md:w-1/2">
+              <label className="text-sm font-semibold text-gray-700">
+                Daily Rate (₹) *
+              </label>
+              <div className="relative">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 font-medium">₹</span>
+                <input
+                  type="number"
+                  name="daily_rate"
+                  value={rates.daily_rate}
+                  onChange={handleChange}
+                  className="w-full pl-8 pr-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-sm"
+                  min="0"
+                  step="0.01"
+                  required
+                />
+              </div>
+              <p className="text-xs text-gray-400">
+                Charged per day (or part of a day) of stay. This is the rate actually used for every bill on this pricing model.
+              </p>
+            </div>
+          )}
+
+          {rates.pricing_model === 'free' && (
+            <p className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-lg p-3">
+              This hospital is on a free (no-charge) stay plan. No stay charges will be added to any bill.
+            </p>
+          )}
 
           {/* Stay Pricing Explainer Card */}
           <div className="bg-blue-50/70 border border-blue-100 rounded-xl p-4 flex gap-3">
             <Clock className="text-blue-500 shrink-0 mt-0.5" size={18} />
             <div className="text-xs text-blue-800 space-y-1">
               <p className="font-semibold text-sm text-blue-900 mb-1">Pricing Stay Logic Preview</p>
-              <p>For stay ≤ 24 hours: Total Charge = ₹{rates.first_day_charge}</p>
-              <p>For stay &gt; 24 hours: Total Charge = ₹{rates.first_day_charge} + (Extra Hours × ₹{rates.hourly_charge_after_24hrs}/hr)</p>
+              {rates.pricing_model === 'tiered_flat_hourly' && (
+                <>
+                  <p>For stay ≤ 24 hours: Total Charge = ₹{rates.first_day_charge}</p>
+                  <p>For stay &gt; 24 hours: Total Charge = ₹{rates.first_day_charge} + (Extra Hours × ₹{rates.hourly_charge_after_24hrs}/hr)</p>
+                </>
+              )}
+              {rates.pricing_model === 'flat_daily' && (
+                <p>Total Charge = ₹{rates.daily_rate} × number of days (any part of a day counts as a full day)</p>
+              )}
+              {rates.pricing_model === 'free' && (
+                <p>Total Charge = ₹0 for any length of stay</p>
+              )}
             </div>
           </div>
 
