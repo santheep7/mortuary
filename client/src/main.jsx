@@ -29,6 +29,18 @@ axios.interceptors.response.use(
   }
 );
 
+// Number inputs (spinner fields) silently change value when the page is
+// scrolled with the cursor resting over one - easy to not notice until the
+// value is already wrong. Blurring the input on wheel stops the browser
+// from treating the scroll as a spinner nudge, while leaving the page free
+// to scroll normally (typing/spinner-arrow editing is unaffected).
+document.addEventListener('wheel', () => {
+  const active = document.activeElement;
+  if (active && active.tagName === 'INPUT' && active.type === 'number') {
+    active.blur();
+  }
+}, { passive: true });
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>

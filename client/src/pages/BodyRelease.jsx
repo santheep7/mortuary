@@ -374,10 +374,10 @@ const formatDuration = (startTime, endTime) => {
                   : '-'}
               </td>
 
-              {/* Duration */}
+              {/* Duration - elapsed time since allocation, as of this page load/refresh */}
               <td className="px-4 py-3 text-sm">
                 {body.allocation
-                  ? <span className="text-orange-600 font-medium">{formatDuration(body.allocation.admissionDateTime, body.allocation.estimatedReleaseDateTime)}</span>
+                  ? <span className="text-orange-600 font-medium">{formatDuration(body.allocation.admissionDateTime)}</span>
                   : '-'}
               </td>
 
