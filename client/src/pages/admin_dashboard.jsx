@@ -385,7 +385,7 @@ function AdminDashboard() {
         ].map((kpi, i) => (
           <div
             key={i}
-            className="bg-white border rounded-xl p-3 flex flex-col justify-between"
+            className="bg-white border rounded-xl p-3 flex flex-col justify-between hover:shadow-md hover:border-slate-300 transition-shadow"
           >
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold text-slate-500 leading-tight">{kpi.label}</span>
