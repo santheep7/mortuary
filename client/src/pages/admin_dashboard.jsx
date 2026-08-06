@@ -383,10 +383,9 @@ function AdminDashboard() {
           { label: 'Released Today', val: stats?.releasedToday || 0, icon: LogOut, color: 'text-emerald-600 bg-emerald-50 border-emerald-100', path: '/dashboard/release-history' },
           { label: 'Occupancy %', val: `${computedMetrics.occupancyRate.toFixed(0)}%`, icon: TrendingUp, color: 'text-sky-600 bg-sky-50 border-sky-100', path: '/dashboard/cabin-allocation' }
         ].map((kpi, i) => (
-          <Link
+          <div
             key={i}
-            to={kpi.path}
-            className="bg-white border rounded-xl p-3 flex flex-col justify-between hover:shadow-md hover:border-slate-300 transition-shadow cursor-pointer"
+            className="bg-white border rounded-xl p-3 flex flex-col justify-between"
           >
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold text-slate-500 leading-tight">{kpi.label}</span>
@@ -395,7 +394,7 @@ function AdminDashboard() {
               </div>
             </div>
             <div className="text-lg font-bold text-slate-900 leading-none">{kpi.val}</div>
-          </Link>
+          </div>
         ))}
       </div>
 
